@@ -1,0 +1,253 @@
+U X / U I P R O D U C T C O N C E P T · U P D AT E D
+Flashcard study app
+Tap. Flip. Swipe.
+A focused iPhone 16 Pro Max study experience. Select a
+deck and the flashcard becomes almost the entire screen.
+Tap to reveal the back, swipe left to keep the card in the
+loop, and swipe right to remove it from the active loop.
+Full-screen card
+Tap to flip
+Left = loop
+Right = remove
+01
+Select deck
+One tap enters study mode
+immediately.
+02
+Tap to flip
+No visible flip button. The card itself is
+the control.
+03
+Swipe to sort
+Left repeats. Right removes from the
+current loop.
+9:41
+▮▮▮ ◉ ▭
+FRONT
+der
+Entwurf
+12 / 40
+Flashcard App Concept
+Updated UX/UI Spec
+
+0 1 / E X P E R I E N C E
+Updated core interaction model
+The app is intentionally stripped down. After a deck is selected, the user interacts with one large card surface and two
+swipe directions only.
+Deck Library
+Browse available decks
+→
+Select Deck
+Open deck directly
+→
+Front Side
+Prompt fills screen
+→
+Tap Card
+Flip to back
+→
+Swipe Left / Right
+Loop or remove
+⌁
+Minimal UI
+No visible flip, previous, next, or action buttons
+in study mode. The card is the UI.
+↻
+Tap interaction
+Tap anywhere on the card surface to flip front
+↔ back while keeping the same position.
+←
+Left swipe behavior
+Card fades/slides left and moves to the back of
+the active queue so it appears again later.
+→
+Right swipe behavior
+Card is removed from the active loop for the
+session, so it does not appear again in the
+repeating cycle.
+Overlay count
+The card count stays as a small, quiet text overlay near the lower bottom of the card, for example “12 / 40”. It is visible but
+never competes with the learning content.
+Flashcard App Concept
+2
+
+0 2 / S C R E E N
+Deck library entry screen
+The deck list stays simple. Tapping a deck opens the first card immediately; no extra intermediate detail page is
+needed.
+Whole-tile tap target
+The entire deck tile acts as one touch target. This
+keeps entry fast and clean.
+Fast transition
+Tap a deck → open the card view immediately,
+already in full-screen study mode.
+Quiet information hierarchy
+Deck name is primary. Card count and review
+progress are secondary supporting details.
+9:41
+▮▮▮ ◉ ▭
+Ready to study
+Your decks
+German Vocabulary
+40 cards
+18 reviewed
+Computer Science
+28 cards
+9 reviewed
+Biology - Cells
+52 cards
+31 reviewed
+World Capitals
+24 cards
+24 reviewed
+Flashcard App Concept
+3
+
+0 3 / S T U D Y M O D E
+Front side - full-screen flashcard
+On iPhone 16 Pro Max, the flashcard fills almost the entire screen. No action buttons are shown. The count sits quietly
+near the bottom as an overlay.
+One object, one focus
+The full-screen card is the experience. Everything
+unrelated to learning is visually removed.
+Tap anywhere
+A tap on the card flips it over. The user does not
+need a dedicated flip button.
+No distractions
+Do not show next, previous, flip, or CTA buttons on
+this screen. Only the card content and the small
+progress count should remain.
+9:41
+▮▮▮ ◉ ▭
+FRONT
+der
+Entwurf
+12 / 40
+Flashcard App Concept
+4
+
+0 4 / S T U D Y M O D E
+Back side - revealed answer
+The same card stays in the same location. Only its face changes. This keeps the front and back mentally connected as
+one physical card.
+Same surface
+The back side is not a new page. It is the reverse
+face of the same card.
+Next action is swipe
+After the user sees the answer, the decision is
+directional: swipe left to keep practicing, swipe right
+to remove from the repeating loop.
+Tap again if needed
+The user can tap the card again to flip back to the
+front before making the left/right decision.
+9:41
+▮▮▮ ◉ ▭
+BACK
+the draft
+A preliminary version of a document, design,
+or plan.
+12 / 40
+Flashcard App Concept
+5
+
+0 5 / I N T E R A C T I O N L O G I C
+Swipe behavior and looping logic
+Left and right swipes are not just navigation. They control whether a card remains inside the active study loop.
+Swipe left = keep in loop
+Looping
+When the user swipes left, the current card leaves
+to the left and goes to the back of the queue.
+A
+B
+C
+→ left on A →
+B
+C
+A
+Continuous left swipes create an endless loop: A →
+B → C → A → B → C ...
+Swipe right = remove from loop
+Session removal
+When the user swipes right, the current card is
+removed from the active loop and should not
+appear again during the current cycle.
+Example sequence:
+Start with active deck: A, B, C
+Swipe left on A → queue becomes B, C, A
+Swipe left on B → queue becomes C, A, B
+Swipe right on C → C is removed, active queue
+becomes A, B
+If the user keeps swiping left now, the loop
+becomes A → B → A → B ...
+C
+→ right swipe →
+removed
+This is ideal for study sorting: cards you still need
+stay in the loop, cards you are done with disappear
+from that loop.
+← swipe left
+Card A
+Card A moves to the back of the active queue
+• 
+• 
+• 
+• 
+• 
+Flashcard App Concept
+6
+
+0 6 / P R O D U C T R U L E S
+Design rules, behavior rules, and acceptance criteria
+This final specification summarizes the updated product behavior requested for the prototype PDF.
+Visual rules
+Phone target: iPhone 16 Pro Max.
+Flashcard surface takes almost the full screen.
+Only a tiny count such as 12 / 40 appears near the
+lower bottom as an overlay.
+No extra on-screen buttons or distracting controls
+in study mode.
+Interaction rules
+Tap card = flip front/back.
+Swipe left = keep card in active loop and send it
+to the back.
+Swipe right = remove card from the active
+repeating loop.
+If only A and B remain, repeated left swipes cycle 
+A → B → A → B.
+Motion rules
+Flip animation should feel like one physical card
+turning over.
+Left swipe should visually fade/slide the card out
+to the left.
+Right swipe should clearly communicate dismissal/
+removal from the loop.
+Animations should stay quick and lightweight for
+repeated study.
+Acceptance criteria
+Deck tap opens study mode immediately.
+User can study without visible action buttons.
+Front and back are reachable only by tapping the
+card.
+Loop/removal logic matches the A/B/C examples
+described above.
+Product intent
+The experience should feel almost frictionless: open deck, focus on one card, tap to reveal, and use simple directional swipes
+to control repetition. The UI should disappear as much as possible so the study behavior becomes natural and fast.
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+Flashcard App Concept
+7
