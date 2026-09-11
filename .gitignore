@@ -11,3 +11,4 @@ build/
 .tools/
 artifacts/
 flashcarddecks/
+.claude/worktrees/
