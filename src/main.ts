@@ -2,7 +2,7 @@ import './style.css';
 import {
   loadDecks, saveImport, saveReviewed, mediaForDeck, moveToMemorized, moveBackFromMemorized, unmarkReviewed,
   saveSessionState, setDeckShuffle, renameDeck, deleteDeck, loadSettings, saveSettings, resetProgress, wipeAllDecks,
-  replaceAllDecks, storageSummary,
+  replaceAllDecks, storageSummary, loadBackupStatus, saveBackupStatus, getLastModified,
 } from './storage';
 import { defaultSettings, type AppSettings, type BackgroundPreference, type Card, type Deck, type ImportResult, type ThemePreference } from './model';
 import { StudySession } from './session';
@@ -52,14 +52,21 @@ function persistPreferences() {
 async function syncAllToCloud() {
   if (!currentUser) return 'Sign in to back up your data.';
   const user = currentUser;
+  await saveBackupStatus({ ...(await loadBackupStatus()), lastAttemptAt: Date.now() });
   try {
     await user.getIdToken();
     const decks = await loadDecks();
     await pushAllDecks(user.uid, decks);
     await preferenceQueue;
     await pushSettings(user.uid, currentSettings);
-    return `Backup completed at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Decks, progress and settings were uploaded.`;
-  } catch { return 'Backup did not complete. Check your connection and try again. Your local data is still available.'; }
+    const now = Date.now();
+    await saveBackupStatus({ lastSuccessAt: now, lastAttemptAt: now, lastError: undefined });
+    return `Backup completed at ${new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Decks, progress and settings were uploaded.`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Backup failed';
+    await saveBackupStatus({ ...(await loadBackupStatus()), lastAttemptAt: Date.now(), lastError: message });
+    return 'Backup did not complete. Check your connection and try again. Your local data is still available.';
+  }
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = '') {
@@ -292,7 +299,7 @@ async function settingsScreen() {
   themeGroup.append(element('h2', 'settings-label', 'Appearance'));
   const themeRow = element('div', 'theme-grid');
   themeRow.setAttribute('aria-label', 'Appearance');
-  const themeOptions: [ThemePreference, string][] = [['system', 'Automatic'], ['light', 'Light'], ['dark', 'Dark'], ['paper', 'Warm paper'], ['midnight', 'Midnight blue'], ['forest', 'Forest'], ['rose', 'Rose'], ['ocean', 'Ocean'], ['sunset', 'Sunset'], ['lavender', 'Lavender'], ['slate', 'Slate'], ['amber', 'Amber']];
+  const themeOptions: [ThemePreference, string][] = [['system', 'Automatic'], ['light', 'Light'], ['dark', 'Dark'], ['paper', 'Warm paper'], ['midnight', 'Midnight blue'], ['forest', 'Forest'], ['rose', 'Rose'], ['ocean', 'Ocean'], ['sunset', 'Sunset'], ['lavender', 'Lavender'], ['slate', 'Slate'], ['amber', 'Amber'], ['nova', 'Nova'], ['candy', 'Candy']];
   for (const [value, label] of themeOptions) {
     const segment = button(label, `segment${currentSettings.theme === value ? ' active' : ''}`, () => {
       currentSettings = { ...currentSettings, theme: value };
@@ -322,6 +329,8 @@ async function settingsScreen() {
     ['stars', 'Starlight', 'A scatter of stars'],
     ['cubes', 'Floating glass', 'Slowly turning 3D cubes'],
     ['orbits', 'Orbital glow', 'Luminous rings in motion'],
+    ['prism', 'Flowing glass', 'Soft color blobs, always drifting'],
+    ['rings', 'Liquid waves', 'Warm blobs in slow motion'],
   ];
   const intensityLabel = element('label', 'settings-rate-label background-intensity-label');
   intensityLabel.htmlFor = 'background-intensity';
@@ -465,15 +474,46 @@ async function settingsScreen() {
     cloudMeter.append(meterNumbers, meterBar, meterDetail, refreshMeter);
     accountGroup.append(cloudMeter);
     void updateCloudMeter();
-    const status = element('p', 'settings-about', `Signed in as ${currentUser.email}\nYour decks and progress back up automatically.`);
+    const status = element('p', 'settings-about', `Signed in as ${currentUser.email}`);
+    const formatWhen = (at: number) => {
+      const date = new Date(at);
+      const sameDay = date.toDateString() === new Date().toDateString();
+      return sameDay ? `today at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    };
+    async function refreshBackupStatusLine() {
+      const [backupStatus, lastModified] = await Promise.all([loadBackupStatus(), getLastModified()]);
+      const lines = [`Signed in as ${currentUser?.email ?? ''}`];
+      if (backupStatus.lastError) lines.push(`Backup failed: ${backupStatus.lastError}`);
+      else if (backupStatus.lastSuccessAt) lines.push(`Last backed up ${formatWhen(backupStatus.lastSuccessAt)}.`);
+      else lines.push('Never backed up yet.');
+      if (lastModified > (backupStatus.lastSuccessAt ?? 0)) lines.push('Changes pending sync.');
+      status.textContent = lines.join('\n');
+    }
+    void refreshBackupStatusLine();
     const syncButton = button('Sync now', 'text-button', async () => {
       syncButton.disabled = true; syncButton.textContent = 'Syncing…';
-      status.textContent = await syncAllToCloud();
+      await syncAllToCloud();
+      await refreshBackupStatusLine();
       await updateCloudMeter(true);
       syncButton.disabled = false; syncButton.textContent = 'Sync now';
     });
+    const restoreButton = button('Restore from backup…', 'text-button', async () => {
+      restoreButton.disabled = true;
+      try {
+        const cloud = await pullAll(meterUser.uid);
+        if (!cloud.decks.length) { status.textContent = 'No cloud backup found for this account yet.'; return; }
+        openRestorePreviewSheet(cloud, () => void (async () => {
+          await replaceAllDecks(cloud.decks as Deck[]);
+          if (cloud.settings) { currentSettings = { ...defaultSettings, ...cloud.settings }; await saveSettings(currentSettings); applyTheme(currentSettings.theme); }
+          await saveBackupStatus({ ...(await loadBackupStatus()), lastSuccessAt: Date.now() });
+          pendingNotice = 'Restored your decks and progress from the cloud.';
+          void library();
+        })());
+      } catch { status.textContent = 'Could not check your cloud backup. Check your connection and try again.'; }
+      finally { restoreButton.disabled = false; }
+    });
     const signOutButton = button('Sign out', 'danger-button', async () => { await signOutUser(); void settingsScreen(); });
-    accountGroup.append(status, syncButton, signOutButton);
+    accountGroup.append(status, syncButton, restoreButton, signOutButton);
   } else {
     const emailInput = document.createElement('input');
     emailInput.type = 'email'; emailInput.className = 'settings-select'; emailInput.placeholder = 'Email'; emailInput.autocomplete = 'email';
@@ -514,12 +554,13 @@ async function resolveSignIn() {
   const applyCloud = async () => {
     await replaceAllDecks(cloud.decks as Deck[]);
     if (cloud.settings) { currentSettings = { ...defaultSettings, ...cloud.settings }; await saveSettings(currentSettings); applyTheme(currentSettings.theme); }
+    await saveBackupStatus({ ...(await loadBackupStatus()), lastSuccessAt: Date.now() });
     pendingNotice = 'Restored your decks and progress from the cloud.';
     void library();
   };
   const localIsFresh = localDecks.length === 1 && localDecks[0].id === 'starter' && localDecks[0].reviewed.length === 0;
   if (localIsFresh) { await applyCloud(); return; }
-  openConflictSheet(() => void syncAllToCloud(), () => void applyCloud());
+  openConflictSheet(() => void syncAllToCloud(), () => openRestorePreviewSheet(cloud, () => void applyCloud()));
 }
 
 function openConflictSheet(keepLocal: () => void, useCloud: () => void) {
@@ -531,6 +572,21 @@ function openConflictSheet(keepLocal: () => void, useCloud: () => void) {
     button('Keep this device’s decks', 'sheet-action', () => { backdrop.remove(); keepLocal(); }),
   );
   backdrop.append(sheet);
+  document.body.append(backdrop);
+}
+
+/** Shows what a restore would replace before committing to it. */
+function openRestorePreviewSheet(cloud: Awaited<ReturnType<typeof pullAll>>, onConfirm: () => void) {
+  const backdrop = element('div', 'sheet-backdrop');
+  const sheet = element('div', 'sheet');
+  const cardCount = cloud.decks.reduce((sum, deck) => sum + deck.cards.length, 0);
+  sheet.append(
+    element('p', 'sheet-title', `This backup has ${cloud.decks.length} deck${cloud.decks.length === 1 ? '' : 's'} and ${cardCount} card${cardCount === 1 ? '' : 's'}. Restoring will replace everything currently on this device.`),
+    button('Restore this backup', 'sheet-action danger', () => { backdrop.remove(); onConfirm(); }),
+    button('Cancel', 'sheet-action cancel', () => backdrop.remove()),
+  );
+  backdrop.append(sheet);
+  backdrop.addEventListener('click', event => { if (event.target === backdrop) backdrop.remove(); });
   document.body.append(backdrop);
 }
 

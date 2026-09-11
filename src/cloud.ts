@@ -84,7 +84,14 @@ export async function pushDeck(uid: string, deck: Deck) {
   const operations: Array<(batch: WriteBatch) => void> = [batch => batch.set(deckRef, toCloudDeck(deck))];
   for (const card of deck.cards) {
     const cardRef = doc(deckRef, 'cards', card.id);
-    operations.push(batch => batch.set(cardRef, { front: card.front, back: card.back }));
+    // Firestore rejects undefined field values, so only include what's actually set.
+    const { front, back, example, tags, difficult, schedule } = card;
+    const data: Record<string, unknown> = { front, back };
+    if (example !== undefined) data.example = example;
+    if (tags !== undefined) data.tags = tags;
+    if (difficult !== undefined) data.difficult = difficult;
+    if (schedule !== undefined) data.schedule = schedule;
+    operations.push(batch => batch.set(cardRef, data));
   }
   await commitInChunks(db, operations);
 }
@@ -142,7 +149,7 @@ export async function pullAll(uid: string): Promise<{ decks: RestoredDeck[]; set
   const snapshot = await getDocs(collection(db, 'users', uid, 'decks'));
   const decks = await Promise.all(snapshot.docs.map(async deckDoc => {
     const cardsSnapshot = await getDocs(collection(deckDoc.ref, 'cards'));
-    const cards = cardsSnapshot.docs.map(cardDoc => ({ id: cardDoc.id, ...(cardDoc.data() as { front: string; back: string }) }));
+    const cards = cardsSnapshot.docs.map(cardDoc => ({ id: cardDoc.id, ...(cardDoc.data() as Omit<Card, 'id'>) }));
     return { ...(deckDoc.data() as CloudDeck), cards };
   }));
   const settingsSnap = await getDoc(doc(db, 'users', uid, 'meta', 'settings'));

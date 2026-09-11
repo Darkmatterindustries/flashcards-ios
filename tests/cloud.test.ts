@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // project; they only verify the write-chunking behavior that keeps large
 // decks from exceeding Firestore's per-document and per-batch limits.
 const commits: { sets: number; deletes: number }[] = [];
+const setCalls: { path: string; data: Record<string, unknown> }[] = [];
 
 vi.mock('../src/firebase-config', () => ({
   firebaseConfig: { apiKey: 'test', projectId: 'test' },
@@ -35,7 +36,7 @@ vi.mock('firebase/firestore', () => {
     writeBatch: vi.fn(() => {
       const batch = {
         sets: 0, deletes: 0,
-        set: vi.fn(function (this: typeof batch) { this.sets++; }),
+        set: vi.fn(function (this: typeof batch, ref: { path: string }, data: Record<string, unknown>) { this.sets++; setCalls.push({ path: ref.path, data }); }),
         delete: vi.fn(function (this: typeof batch) { this.deletes++; }),
         commit: vi.fn(async function (this: typeof batch) { commits.push({ sets: this.sets, deletes: this.deletes }); }),
       };
@@ -76,7 +77,7 @@ function makeDeck(cardCount: number) {
 }
 
 describe('cloud sync write chunking', () => {
-  beforeEach(() => { commits.length = 0; });
+  beforeEach(() => { commits.length = 0; setCalls.length = 0; });
 
   it('splits a large deck across multiple batches to respect the 500-write cap', async () => {
     // 1000 cards + 1 metadata write = 1001 operations, chunked at 450 per batch.
@@ -90,5 +91,25 @@ describe('cloud sync write chunking', () => {
     await pushDeck('uid', makeDeck(2));
     expect(commits.length).toBe(1);
     expect(commits[0].sets).toBe(3); // 1 metadata write + 2 cards
+  });
+
+  it('syncs schedule/difficult/tags/example, and never sends undefined fields', async () => {
+    const deck = makeDeck(0);
+    deck.cards = [
+      { id: 'plain', front: 'a', back: 'b' },
+      {
+        id: 'edited', front: 'c', back: 'd', tags: ['noun'], difficult: true, example: 'ex sentence',
+        schedule: { due: 1000, intervalDays: 4, reviews: 2, lapses: 0, lastReviewed: 500 },
+      },
+    ];
+    await pushDeck('uid', deck);
+    const plain = setCalls.find(call => call.path.endsWith('cards/plain'))!.data;
+    expect(plain).toEqual({ front: 'a', back: 'b' });
+    expect(Object.values(plain).every(value => value !== undefined)).toBe(true);
+    const edited = setCalls.find(call => call.path.endsWith('cards/edited'))!.data;
+    expect(edited).toEqual({
+      front: 'c', back: 'd', tags: ['noun'], difficult: true, example: 'ex sentence',
+      schedule: { due: 1000, intervalDays: 4, reviews: 2, lapses: 0, lastReviewed: 500 },
+    });
   });
 });

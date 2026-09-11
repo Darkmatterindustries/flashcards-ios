@@ -120,6 +120,30 @@
   --danger-text: #a3403a; --danger-bg: #f7e3df;
   --nav-bg: rgba(249, 237, 214, .94);
 }
+:root[data-theme="nova"] {
+  color-scheme: dark;
+  --bg: #14102b; --surface: #1e1840; --surface-2: #241c4d;
+  --border: #392e66; --text: #f2eeff; --muted: #b3a6dd;
+  --blue: #9d7cff; --accent-text: #c9aaff; --accent-bg: #2d2361;
+  --danger-text: #ff9a8a; --danger-bg: #3a2020;
+  --nav-bg: rgba(20, 16, 43, .9);
+}
+:root[data-theme="nova"] .deck-tile-main, :root[data-theme="nova"] .card-face {
+  background: linear-gradient(135deg, #5b3fd9 0%, #b74fd6 50%, #ff6fa8 100%);
+  --text: #fff9ff; --muted: #f0dcff; --border: rgba(255, 255, 255, .32); --blue: #ffffff; --accent-text: #ffe6f4;
+}
+:root[data-theme="candy"] {
+  color-scheme: light;
+  --bg: #fff3e9; --surface: #fffaf4; --surface-2: #fff0dd;
+  --border: #ffdcb0; --text: #3a2410; --muted: #9c7a52;
+  --blue: #ff6f61; --accent-text: #e04f6f; --accent-bg: #ffe3d6;
+  --danger-text: #b3413b; --danger-bg: #fdeceb;
+  --nav-bg: rgba(255, 250, 244, .94);
+}
+:root[data-theme="candy"] .deck-tile-main, :root[data-theme="candy"] .card-face {
+  background: linear-gradient(135deg, #ffb648 0%, #ff6f91 50%, #a86bff 100%);
+  --text: #fff9f2; --muted: #ffe6d8; --border: rgba(255, 255, 255, .35); --blue: #ffffff; --accent-text: #fff0e0;
+}
 :root[data-theme="dark"] { color-scheme: dark; }
 :root[data-theme="light"] { color-scheme: light; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme]) { color-scheme: dark; } }
@@ -138,7 +162,11 @@
 [data-palette="lavender"] .theme-swatch { background: #f2eefb; }
 [data-palette="slate"] .theme-swatch { background: #14171c; }
 [data-palette="amber"] .theme-swatch { background: #fbf1de; }
+[data-palette="nova"] .theme-swatch { background: linear-gradient(135deg, #5b3fd9, #b74fd6, #ff6fa8); }
+[data-palette="candy"] .theme-swatch { background: linear-gradient(135deg, #ffb648, #ff6f91, #a86bff); }
 * { box-sizing: border-box; }
+html { touch-action: manipulation; scrollbar-width: none; }
+html::-webkit-scrollbar { display: none; }
 body { margin: 0; overscroll-behavior: none; background: var(--bg); }
 :root { --wallpaper-image: none; --wallpaper-size: auto; --wallpaper-opacity: .6; }
 :root[data-background="aurora"], [data-wallpaper="aurora"] {
@@ -327,8 +355,8 @@ h1 { font-size: 25px; letter-spacing: -.8px; font-weight: 700; line-height: 1.2;
 /* Decorative 3D scenes stay behind content and never receive gestures. */
 .ambient-scene { display: none; position: absolute; inset: 0; overflow: hidden; pointer-events: none; perspective: 850px; opacity: var(--wallpaper-opacity); }
 body > .ambient-scene { position: fixed; z-index: 0; }
-:root:is([data-background="cubes"], [data-background="orbits"]) .ambient-scene { display: block; }
-:root:is([data-background="cubes"], [data-background="orbits"]) .card-face::before { display: none; }
+:root:is([data-background="cubes"], [data-background="orbits"], [data-background="prism"], [data-background="rings"]) .ambient-scene { display: block; }
+:root:is([data-background="cubes"], [data-background="orbits"], [data-background="prism"], [data-background="rings"]) .card-face::before { display: none; }
 .card-face > .ambient-scene { opacity: calc(var(--wallpaper-opacity) * .7); }
 .ambient-floater { position: absolute; width: 110px; height: 110px; transform-style: preserve-3d; animation: ambient-drift 19s ease-in-out infinite alternate; }
 .floater-0 { left: -20px; top: 13%; }
@@ -344,17 +372,51 @@ body > .ambient-scene { position: fixed; z-index: 0; }
 .cube-bottom { transform: rotateX(-90deg) translateZ(55px); }
 .ambient-orbit { position: absolute; inset: -25px; border: 2px solid color-mix(in srgb, var(--blue) 60%, transparent); border-radius: 50%; box-shadow: 0 0 18px color-mix(in srgb, var(--blue) 15%, transparent), inset 0 0 16px color-mix(in srgb, var(--blue) 10%, transparent); transform: rotateX(58deg) rotateY(20deg); transform-style: preserve-3d; animation: ambient-orbit 27s linear infinite; }
 .ambient-orbit span { position: absolute; top: 15%; left: 10%; width: 24px; height: 24px; border-radius: 50%; background: radial-gradient(circle at 30% 25%, var(--surface), var(--blue) 45%, var(--accent-bg)); box-shadow: 0 0 20px color-mix(in srgb, var(--blue) 50%, transparent); }
-:root[data-background="cubes"] .ambient-orbit, :root[data-background="orbits"] .ambient-cube { display: none; }
+:root[data-background="cubes"] :is(.ambient-orbit, .ambient-prism, .ambient-rings) { display: none; }
+:root[data-background="orbits"] :is(.ambient-cube, .ambient-prism, .ambient-rings) { display: none; }
+:root[data-background="prism"] :is(.ambient-cube, .ambient-orbit, .ambient-rings) { display: none; }
+:root[data-background="rings"] :is(.ambient-cube, .ambient-orbit, .ambient-prism) { display: none; }
 :root[data-background="orbits"] .floater-1 .ambient-orbit { animation-delay: -12s; }
 :root[data-background="orbits"] .floater-2 .ambient-orbit { animation-delay: -19s; }
+/* Prism/rings render as a couple of big soft morphing color blobs (an Apple-style
+   moving wallpaper), not several small floating objects. */
+:root:is([data-background="prism"], [data-background="rings"]) .floater-1,
+:root:is([data-background="prism"], [data-background="rings"]) .floater-2 { display: none; }
+:root:is([data-background="prism"], [data-background="rings"]) .floater-0 {
+  left: 50%; top: 50%; width: 640px; height: 640px; margin: -320px 0 0 -320px; animation: none;
+}
+.ambient-prism, .ambient-rings { position: absolute; inset: -15%; }
+.prism-blob, .ambient-rings span {
+  position: absolute; filter: blur(32px);
+  animation: blob-morph 24s ease-in-out infinite alternate, blob-drift 32s ease-in-out infinite alternate;
+}
+.prism-blob-0 { width: 72%; height: 72%; top: -10%; left: -8%; background: radial-gradient(circle at 35% 30%, #3d6bff, transparent 68%); border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%; }
+.prism-blob-1 { width: 66%; height: 66%; bottom: -12%; right: -10%; background: radial-gradient(circle at 60% 65%, #8a4bf0, transparent 68%); border-radius: 58% 42% 35% 65% / 55% 60% 40% 45%; animation-duration: 30s, 38s; animation-direction: alternate-reverse, alternate-reverse; }
+.prism-blob-2 { width: 54%; height: 54%; top: 20%; right: 4%; background: radial-gradient(circle at 40% 40%, #1c2c78, transparent 68%); border-radius: 50% 50% 40% 60% / 60% 40% 60% 40%; animation-duration: 20s, 27s; }
+.ring-a { width: 70%; height: 70%; top: -12%; left: -8%; background: radial-gradient(circle at 35% 30%, #ff5f8f, transparent 68%); border-radius: 55% 45% 65% 35% / 40% 55% 45% 60%; animation-duration: 26s, 34s; }
+.ring-b { width: 62%; height: 62%; bottom: -10%; right: -8%; background: radial-gradient(circle at 55% 60%, #8a3df5, transparent 68%); border-radius: 40% 60% 45% 55% / 55% 45% 60% 40%; animation-duration: 29s, 37s; animation-direction: alternate-reverse, alternate-reverse; }
+.ring-c { width: 52%; height: 52%; top: 24%; left: 26%; background: radial-gradient(circle at 40% 40%, #ff8a3d, transparent 68%); border-radius: 48% 52% 55% 45% / 50% 50% 45% 55%; animation-duration: 21s, 28s; }
 @keyframes ambient-turn { from { transform: rotateX(24deg) rotateY(32deg); } to { transform: rotateX(384deg) rotateY(392deg); } }
 @keyframes ambient-drift { from { transform: translate3d(0, -14px, 0); } to { transform: translate3d(18px, 20px, 50px); } }
 @keyframes ambient-orbit { from { transform: rotateX(58deg) rotateY(20deg) rotateZ(0); } to { transform: rotateX(58deg) rotateY(380deg) rotateZ(360deg); } }
+@keyframes blob-morph {
+  0% { border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%; }
+  50% { border-radius: 58% 42% 35% 65% / 55% 60% 40% 45%; }
+  100% { border-radius: 48% 52% 60% 40% / 40% 60% 50% 50%; }
+}
+@keyframes blob-drift {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(4%, -5%, 0) scale(1.1); }
+  100% { transform: translate3d(-4%, 5%, 0) scale(0.94); }
+}
 :root[data-background-motion="off"] .ambient-scene *, :root[data-page-hidden="true"] .ambient-scene * { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) { .ambient-scene * { animation: none !important; } }
 [data-wallpaper="cubes"], [data-wallpaper="orbits"] { --wallpaper-image: radial-gradient(ellipse at 80% 15%, color-mix(in srgb, var(--blue) 30%, transparent), transparent 75%); --wallpaper-size: 100% 100%; }
 [data-wallpaper="cubes"] .background-preview-card { transform: perspective(160px) rotateY(-30deg) rotateX(20deg); box-shadow: 7px 6px 0 color-mix(in srgb, var(--blue) 25%, transparent); }
 [data-wallpaper="orbits"] .background-preview-card { border-radius: 50%; width: 64px; height: 42px; transform: rotate(-25deg); border: 2px solid var(--blue); background: transparent; box-shadow: 0 0 15px color-mix(in srgb, var(--blue) 30%, transparent); }
+[data-wallpaper="prism"] { --wallpaper-image: radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--blue) 55%, transparent), transparent 70%), radial-gradient(circle at 75% 70%, color-mix(in srgb, var(--accent-text) 50%, transparent), transparent 70%); --wallpaper-size: 100% 100%; }
+[data-wallpaper="rings"] { --wallpaper-image: radial-gradient(circle at 30% 30%, color-mix(in srgb, #ff6f91 55%, transparent), transparent 70%), radial-gradient(circle at 75% 70%, color-mix(in srgb, #7a5cff 50%, transparent), transparent 70%); --wallpaper-size: 100% 100%; }
+[data-wallpaper="prism"] .background-preview-card, [data-wallpaper="rings"] .background-preview-card { border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%; background: transparent; border: none; box-shadow: none; color: transparent; }
 
 .storage-summary { padding: 16px; margin-bottom: 16px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
 .storage-limits { margin-bottom: 20px; }

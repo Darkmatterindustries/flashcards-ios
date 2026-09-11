@@ -29,10 +29,13 @@ export interface Deck {
 export interface MediaFile { id: string; packageId: string; name: string; data: ArrayBuffer; mime: string }
 export interface ImportResult { decks: Deck[]; media: MediaFile[]; warnings: string[]; packageId: string }
 
-export type ThemePreference = 'system' | 'light' | 'dark' | 'paper' | 'midnight' | 'forest' | 'rose' | 'ocean' | 'sunset' | 'lavender' | 'slate' | 'amber';
-export type BackgroundPreference = 'none' | 'aurora' | 'paper' | 'stars' | 'cubes' | 'orbits';
+export type ThemePreference = 'system' | 'light' | 'dark' | 'paper' | 'midnight' | 'forest' | 'rose' | 'ocean' | 'sunset' | 'lavender' | 'slate' | 'amber' | 'nova' | 'candy';
+export type BackgroundPreference = 'none' | 'aurora' | 'paper' | 'stars' | 'cubes' | 'orbits' | 'prism' | 'rings';
 export interface AppSettings { voiceURI: string; speechRate: number; theme: ThemePreference; preferRecordedAudio?: boolean; background?: BackgroundPreference; backgroundIntensity?: number; backgroundMotion?: boolean; dailyGoal?: number }
 export const defaultSettings: AppSettings = { voiceURI: '', speechRate: 1, theme: 'system', preferRecordedAudio: true, background: 'none', backgroundIntensity: 0.6 };
+
+/** Device-local record of backup health; never synced to the cloud itself. */
+export interface BackupStatus { lastSuccessAt?: number; lastAttemptAt?: number; lastError?: string }
 
 export function starterDeck(): Deck {
   return {

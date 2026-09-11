@@ -1,7 +1,24 @@
 import { openDB, type DBSchema } from 'idb';
-import { starterDeck, defaultSettings, type AppSettings, type Deck, type ImportResult, type MediaFile, type SessionSnapshot } from './model';
+import { starterDeck, defaultSettings, type AppSettings, type BackupStatus, type Deck, type ImportResult, type MediaFile, type SessionSnapshot } from './model';
 import type { Card } from './model';
 import { nextSchedule, localDay, type Rating } from './review';
+
+/** Records that local content changed, for the settings screen's "pending changes" indicator. Best-effort, not tied to the write it tracks. */
+export async function markModified() {
+  await (await database).put('settings', Date.now(), 'lastModified');
+}
+
+export async function getLastModified(): Promise<number> {
+  return (await (await database).get('settings', 'lastModified')) as number | undefined ?? 0;
+}
+
+export async function loadBackupStatus(): Promise<BackupStatus> {
+  return (await (await database).get('settings', 'backupStatus')) as BackupStatus | undefined ?? {};
+}
+
+export async function saveBackupStatus(status: BackupStatus) {
+  await (await database).put('settings', status, 'backupStatus');
+}
 
 export async function editCard(deckId: string, cardId: string, changes: Pick<Card, 'front' | 'back' | 'example' | 'tags' | 'difficult'>) {
   const db = await database;
@@ -12,6 +29,7 @@ export async function editCard(deckId: string, cardId: string, changes: Pick<Car
   Object.assign(card, changes);
   await tx.store.put(deck);
   await tx.done;
+  void markModified();
 }
 
 export async function recordActivity(deckId: string, delta = 1) {
@@ -25,6 +43,7 @@ export async function recordActivity(deckId: string, delta = 1) {
     await tx.store.put(deck);
   }
   await tx.done;
+  void markModified();
 }
 
 export async function rateCard(deckId: string, cardId: string, rating: Rating) {
@@ -39,13 +58,14 @@ export async function rateCard(deckId: string, cardId: string, rating: Rating) {
   deck.activity[day] = (deck.activity[day] ?? 0) + 1;
   await tx.store.put(deck);
   await tx.done;
+  void markModified();
   return card.schedule;
 }
 
 interface LibraryDB extends DBSchema {
   decks: { key: string; value: Deck };
   media: { key: string; value: MediaFile; indexes: { package: string } };
-  settings: { key: string; value: boolean | AppSettings };
+  settings: { key: string; value: boolean | number | AppSettings | BackupStatus };
 }
 
 const database = openDB<LibraryDB>('flashcards', 1, {
@@ -76,6 +96,7 @@ export async function saveImport(result: ImportResult): Promise<boolean> {
   for (const deck of result.decks) await decks.put(deck);
   for (const file of result.media) await tx.objectStore('media').put(file);
   await tx.done;
+  void markModified();
   return true;
 }
 
@@ -85,6 +106,7 @@ export async function saveReviewed(deckId: string, ids: Iterable<string>) {
   const deck = await tx.store.get(deckId);
   if (deck) { deck.reviewed = [...new Set([...deck.reviewed, ...ids])]; await tx.store.put(deck); }
   await tx.done;
+  void markModified();
 }
 
 /** Permanently relocates a card into its deck's paired "Memorized" companion, creating it on first use. */
@@ -106,6 +128,7 @@ export async function moveToMemorized(sourceDeckId: string, cardId: string) {
   await store.put(source);
   await store.put(companion);
   await tx.done;
+  void markModified();
 }
 
 export async function mediaForDeck(deck: Deck) {
@@ -140,6 +163,7 @@ export async function moveBackFromMemorized(sourceDeckId: string, cardId: string
   if (source) { source.cards.push(card); await store.put(source); }
   await store.put(companion);
   await tx.done;
+  void markModified();
 }
 
 export async function unmarkReviewed(deckId: string, cardId: string) {
@@ -148,6 +172,7 @@ export async function unmarkReviewed(deckId: string, cardId: string) {
   const deck = await tx.store.get(deckId);
   if (deck) { deck.reviewed = deck.reviewed.filter(id => id !== cardId); await tx.store.put(deck); }
   await tx.done;
+  void markModified();
 }
 
 /** Persists the in-progress queue so leaving and reopening this deck resumes it; pass undefined to clear it. */
@@ -165,6 +190,7 @@ export async function setDeckShuffle(deckId: string, shuffle: boolean) {
   const deck = await tx.store.get(deckId);
   if (deck) { deck.shuffle = shuffle; await tx.store.put(deck); }
   await tx.done;
+  void markModified();
 }
 
 export async function renameDeck(deckId: string, name: string) {
@@ -173,6 +199,7 @@ export async function renameDeck(deckId: string, name: string) {
   const deck = await tx.store.get(deckId);
   if (deck) { deck.name = name; await tx.store.put(deck); }
   await tx.done;
+  void markModified();
 }
 
 /** Deletes a deck, its Memorized companion (if any), and any media no other deck still references. */
@@ -192,6 +219,7 @@ export async function deleteDeck(deckId: string) {
     }
   }
   await tx.done;
+  void markModified();
 }
 
 export async function loadSettings(): Promise<AppSettings> {
@@ -232,6 +260,7 @@ export async function resetProgress() {
     cursor = await cursor.continue();
   }
   await tx.done;
+  void markModified();
 }
 
 /** Deletes every deck and media file, then lets the next loadDecks() reseed the starter deck. */
@@ -242,4 +271,5 @@ export async function wipeAllDecks() {
   await tx.objectStore('media').clear();
   await tx.objectStore('settings').delete('seeded');
   await tx.done;
+  void markModified();
 }
