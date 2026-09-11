@@ -11,6 +11,8 @@ export interface Deck {
   reviewed: string[];
   importedAt: number;
   packageId?: string;
+  /** Id of the deck this one collects memorized (swiped-right) cards from, if any. */
+  memorizedFor?: string;
 }
 
 export interface MediaFile { id: string; packageId: string; name: string; data: ArrayBuffer; mime: string }

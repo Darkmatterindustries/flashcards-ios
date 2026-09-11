@@ -14,10 +14,18 @@ test('PDF study flow, tap flip, A/B loop, downward exit and session reset', asyn
   await expect(page.locator('.deck-count')).toHaveText('3 cards');
   await page.locator('.deck-tile').click();
   await expect(page.locator('.card-counter')).toHaveText('1 / 3');
+  // Every study-screen button is visually hidden, with one deliberate exception:
+  // the pronunciation icon is a real, visible button by design.
   expect(await page.locator('.study button').evaluateAll(buttons => buttons.every(button => {
+    if (button.classList.contains('speak-button')) return true;
     const parent = button.closest('.sr-only');
     return !!parent && getComputedStyle(parent).clip === 'rect(0px, 0px, 0px, 0px)';
   }))).toBe(true);
+  // Some Playwright WebKit builds omit the Speech Synthesis API that real
+  // Safari/iOS ships, so the icon is only expected where it's supported.
+  if (await page.evaluate(() => 'speechSynthesis' in window)) {
+    await expect(page.locator('.speak-button')).toBeVisible();
+  }
   await page.locator('.card').tap();
   await expect(page.locator('.card')).toHaveClass(/flipped/);
   await expect(page.locator('.back')).toHaveAttribute('aria-hidden', 'false');
@@ -25,16 +33,27 @@ test('PDF study flow, tap flip, A/B loop, downward exit and session reset', asyn
   await expect(page.locator('.card')).not.toHaveClass(/flipped/);
   await drag(page, 'left'); await expect(page.locator('.card-counter')).toHaveText('2 / 3');
   await drag(page, 'left'); await expect(page.locator('.card-counter')).toHaveText('3 / 3');
+  // Swiping right permanently relocates the card to its "Memorized" companion
+  // deck; the session queue itself still behaves exactly as it did before.
   await drag(page, 'right'); await expect(page.locator('.card-counter')).toHaveText('1 / 3');
   await drag(page, 'left'); await expect(page.locator('.card-counter')).toHaveText('2 / 3');
   await drag(page, 'left'); await expect(page.locator('.card-counter')).toHaveText('1 / 3');
   await drag(page, 'down'); await expect(page.locator('h1')).toHaveText('Your decks');
-  await expect(page.locator('.reviewed')).toHaveText('3 reviewed');
-  await page.reload(); await page.locator('.deck-tile').click();
-  for (const count of ['2 / 3', '3 / 3']) { await drag(page, 'right'); await expect(page.locator('.card-counter')).toHaveText(count); }
+  await expect(page.locator('.deck-tile')).toHaveCount(2);
+  const original = page.getByRole('button', { name: /^German Vocabulary,/ });
+  const memorized = page.getByRole('button', { name: /^German Vocabulary — Memorized,/ });
+  await expect(original.locator('.deck-count')).toHaveText('2 cards');
+  await expect(original.locator('.reviewed')).toHaveText('2 reviewed');
+  await expect(memorized.locator('.deck-count')).toHaveText('1 cards');
+  await page.reload();
+  await page.getByRole('button', { name: /^German Vocabulary,/ }).click();
+  await expect(page.locator('.card-counter')).toHaveText('1 / 2');
+  await drag(page, 'right'); await expect(page.locator('.card-counter')).toHaveText('2 / 2');
   await drag(page, 'right'); await expect(page.locator('h1')).toHaveText('All clear.');
-  await page.getByRole('button', { name: 'Study again' }).click();
-  await expect(page.locator('.card-counter')).toHaveText('1 / 3');
+  await page.getByRole('button', { name: 'Your decks' }).click();
+  await expect(page.locator('.deck-tile')).toHaveCount(2);
+  await expect(page.getByRole('button', { name: /^German Vocabulary,/ }).locator('.deck-count')).toHaveText('0 cards');
+  await expect(memorized.locator('.deck-count')).toHaveText('3 cards');
 });
 
 for (const modern of [false, true]) test(`imports ${modern ? 'modern' : 'legacy'} apkg and persists media offline`, async ({ page, context }) => {

@@ -1,5 +1,5 @@
 import './style.css';
-import { loadDecks, saveImport, saveReviewed, mediaForDeck } from './storage';
+import { loadDecks, saveImport, saveReviewed, mediaForDeck, moveToMemorized } from './storage';
 import type { Deck } from './model';
 import { StudySession } from './session';
 import { cardContent } from './content';
@@ -27,6 +27,21 @@ function button(text: string, className: string, action: () => void) {
 function setScreen(screen: HTMLElement) {
   cleanup(); cleanup = () => {};
   app.replaceChildren(screen);
+}
+
+/** Strips markup from a card face so it can be spoken; never inserted into the page. */
+function plainText(html: string) {
+  const holder = document.createElement('div');
+  holder.innerHTML = html.replace(/<br\s*\/?>/gi, ' ');
+  return (holder.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+function speak(text: string) {
+  if (!('speechSynthesis' in window) || !text) return;
+  speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'de-DE';
+  speechSynthesis.speak(utterance);
 }
 
 async function library() {
@@ -59,7 +74,7 @@ async function library() {
       tile.setAttribute('aria-label', `${deck.name}, ${deck.cards.length} cards, ${reviewed} reviewed. Start studying.`);
       list.append(tile);
     }
-    const hint = element('p', 'library-hint', 'Tap to flip. Left to repeat. Right to remove.\nSwipe down to return to your decks.');
+    const hint = element('p', 'library-hint', 'Tap to flip. Left to repeat. Right to memorize.\nSwipe down to return to your decks.');
     const notice = element('p', 'notice', pendingNotice);
     notice.setAttribute('role', 'status');
     pendingNotice = '';
@@ -104,6 +119,9 @@ async function library() {
 
 async function study(deck: Deck) {
   const session = new StudySession(deck.cards);
+  // A "Memorized" companion deck just studies normally; only a primary deck
+  // relocates swiped-right cards into its companion.
+  const isMemorizedDeck = !!deck.memorizedFor;
   const screen = element('section', 'study');
   const shell = element('div', 'card-shell');
   const card = element('div', 'card');
@@ -120,13 +138,22 @@ async function study(deck: Deck) {
   card.append(front, back);
   const count = element('span', 'card-counter');
   count.setAttribute('aria-hidden', 'true');
+  const speechSupported = 'speechSynthesis' in window;
+  const speakButton = speechSupported ? element('button', 'speak-button', '') : undefined;
+  if (speakButton) {
+    speakButton.type = 'button';
+    speakButton.setAttribute('aria-label', 'Hear pronunciation');
+    speakButton.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M3 10v4h4l5 5V5L7 10H3z"/><path d="M16.3 12c0-1.5-.8-2.8-2-3.4v6.8c1.2-.6 2-1.9 2-3.4z"/><path d="M14.3 4.6v2.1c2.3.8 4 3 4 5.3s-1.7 4.5-4 5.3v2.1c3.4-.9 6-4 6-7.4s-2.6-6.5-6-7.4z"/></svg>';
+  }
   shell.append(card, count);
-  const instructions = element('p', 'sr-only', 'Tap to flip. Swipe left to repeat, right to remove, or down to return to your decks. With a keyboard, use Enter to flip, arrow keys to sort, and Escape to leave.');
+  if (speakButton) shell.append(speakButton);
+  const rightSwipeLabel = isMemorizedDeck ? 'Remove card from this session' : 'Move card to Memorized deck';
+  const instructions = element('p', 'sr-only', `Tap to flip. Swipe left to repeat, right to ${isMemorizedDeck ? 'remove' : 'memorize'}, or down to return to your decks. With a keyboard, use Enter to flip, arrow keys to sort, and Escape to leave.`);
   instructions.id = 'study-instructions';
   const accessibleActions = element('div', 'sr-only');
   accessibleActions.append(
     button('Keep card in loop', '', () => void swipe('left')),
-    button('Remove card from this session', '', () => void swipe('right')),
+    button(rightSwipeLabel, '', () => void swipe('right')),
     button('Return to your decks', '', () => void leave()),
   );
   screen.append(shell, instructions, accessibleActions);
@@ -148,6 +175,12 @@ async function study(deck: Deck) {
     };
     next(0);
   };
+  speakButton?.addEventListener('pointerdown', event => event.stopPropagation());
+  speakButton?.addEventListener('click', event => {
+    event.stopPropagation();
+    if (busy || disposed || !session.current) return;
+    speak(plainText(session.current.front));
+  });
   const refreshAccessibility = () => {
     front.setAttribute('aria-hidden', String(flipped));
     back.setAttribute('aria-hidden', String(!flipped));
@@ -190,13 +223,17 @@ async function study(deck: Deck) {
     if (busy || disposed || !session.current) return;
     busy = true;
     stopAudio();
+    if (speechSupported) speechSynthesis.cancel();
     shell.style.transition = reduceMotion.matches ? 'none' : 'transform 180ms ease-out, opacity 180ms ease-out';
     shell.style.transform = `translateX(${direction === 'left' ? '-110' : '110'}vw) rotate(${direction === 'left' ? '-8' : '8'}deg)`;
     shell.style.opacity = '0';
     timer = setTimeout(() => {
       if (disposed) return;
+      const swiped = session.current;
       session.swipe(direction);
-      void persist();
+      void persist().then(() => {
+        if (direction === 'right' && !isMemorizedDeck && swiped) return moveToMemorized(deck.id, swiped.id);
+      }).catch(() => { pendingNotice = 'That card could not be moved to your Memorized deck. Please try again.'; });
       if (!session.remaining) { void complete(); return; }
       card.classList.add('no-motion');
       render();
@@ -268,6 +305,7 @@ async function study(deck: Deck) {
   window.addEventListener('keydown', keydown);
   cleanup = () => {
     disposed = true; clearTimeout(timer); stopAudio();
+    if (speechSupported) speechSynthesis.cancel();
     media.clear();
     window.removeEventListener('keydown', keydown);
   };

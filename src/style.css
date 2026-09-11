@@ -77,12 +77,19 @@ h1 { font-size: 25px; letter-spacing: -.8px; font-weight: 700; line-height: 1.2;
 .cloze { color: #377acb; }
 .media-missing { color: var(--muted); font-size: 15px; font-weight: 400; }
 .card-counter { position: absolute; bottom: 57px; left: 0; right: 0; pointer-events: none; text-align: center; color: #929caf; font-size: 12px; letter-spacing: .7px; font-weight: 600; }
+.speak-button {
+  position: absolute; top: 58px; right: 58px; z-index: 2;
+  width: 44px; height: 44px; border: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #4e9bf0; background: #e9f3fe;
+}
+.speak-button:active { background: #dcebfc; }
 .completion { min-height: 100dvh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 18px; max-width: 440px; margin: auto; padding: calc(env(safe-area-inset-top, 0px) + 32px) 32px calc(env(safe-area-inset-bottom, 0px) + 32px); }
 .completion h1 { font-size: 36px; }
 .completion > p:not(.eyebrow) { color: var(--muted); font-size: 16px; line-height: 1.6; }
 .primary-button { border: 0; background: #518bd6; border-radius: 15px; color: white; min-height: 50px; padding: 14px 26px; font-weight: 600; margin-top: 16px; }
 .text-button { background: none; color: #457dc4; border: 0; min-height: 44px; padding: 10px 20px; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; clip: rect(0,0,0,0); overflow: hidden; white-space: nowrap; }
-@media (max-width: 380px) { .library { padding-left: 20px; padding-right: 20px; } .study { padding-left: 16px; padding-right: 16px; } .face-label { top: 36px; left: 32px; } .deck-tile { padding: 20px; } }
-@media (max-height: 600px) { .study { padding-top: calc(env(safe-area-inset-top, 0px) + 10px); } .face-label { top: 16px; left: 24px; padding: 10px 16px; min-width: 70px; } .card-counter { bottom: 20px; } .card-content { top: 25%; bottom: 18%; } }
+@media (max-width: 380px) { .library { padding-left: 20px; padding-right: 20px; } .study { padding-left: 16px; padding-right: 16px; } .face-label { top: 36px; left: 32px; } .speak-button { top: 36px; right: 32px; } .deck-tile { padding: 20px; } }
+@media (max-height: 600px) { .study { padding-top: calc(env(safe-area-inset-top, 0px) + 10px); } .face-label { top: 16px; left: 24px; padding: 10px 16px; min-width: 70px; } .speak-button { top: 16px; right: 24px; width: 38px; height: 38px; } .card-counter { bottom: 20px; } .card-content { top: 25%; bottom: 18%; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }

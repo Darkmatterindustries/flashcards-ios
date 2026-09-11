@@ -46,6 +46,27 @@ export async function saveReviewed(deckId: string, ids: Iterable<string>) {
   await tx.done;
 }
 
+/** Permanently relocates a card into its deck's paired "Memorized" companion, creating it on first use. */
+export async function moveToMemorized(sourceDeckId: string, cardId: string) {
+  const db = await database;
+  const tx = db.transaction('decks', 'readwrite');
+  const store = tx.objectStore('decks');
+  const source = await store.get(sourceDeckId);
+  const index = source?.cards.findIndex(card => card.id === cardId) ?? -1;
+  if (!source || index === -1) { await tx.done; return; }
+  const [card] = source.cards.splice(index, 1);
+  source.reviewed = source.reviewed.filter(id => id !== cardId);
+  const companionId = `${sourceDeckId}::memorized`;
+  const companion = await store.get(companionId) ?? {
+    id: companionId, name: `${source.name} — Memorized`, cards: [], reviewed: [],
+    importedAt: Date.now(), packageId: source.packageId, memorizedFor: sourceDeckId,
+  };
+  companion.cards.push(card);
+  await store.put(source);
+  await store.put(companion);
+  await tx.done;
+}
+
 export async function mediaForDeck(deck: Deck) {
   return deck.packageId ? (await database).getAllFromIndex('media', 'package', deck.packageId) : [];
 }

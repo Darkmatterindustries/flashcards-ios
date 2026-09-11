@@ -25,13 +25,14 @@ The browser tests use a 440 × 956 viewport for the iPhone 16 Pro Max layout. Ac
 ## Study behavior
 
 - Tap any deck tile to start a new session immediately.
-- Tap the card to flip front/back. No visible study action buttons.
+- Tap the card to flip front/back. No visible study action buttons, aside from one small pronunciation icon (see below).
 - Swipe left: append the current card to the queue.
-- Swipe right: remove it from this session only.
+- Swipe right: permanently move the card into a paired "‹Deck› — Memorized" deck (created on first use). Studying that companion deck itself uses the original session-only swipe-right behavior, so memorized cards aren't relocated a second time.
 - Swipe down at the top of the card content: return to the library (approved addition to the PDF).
-- Removing the last card opens a completion screen. Starting again restores all cards.
-- The quiet counter is the original card number / total deck size. This stays meaningful when the queue repeats or shrinks.
+- Removing the last card opens a completion screen. Starting again restores all remaining cards.
+- The quiet counter is the original card number / total deck size for this session. This stays meaningful when the queue repeats or shrinks.
 - Library progress counts distinct cards swiped at least once. It is saved across sessions; it is not an Anki scheduling score.
+- A small speaker icon on the card speaks the German front text aloud via the Web Speech API (`de-DE`), which uses whichever system voice — including an Enhanced/Premium voice — the user has installed for German. It works for every deck, not just imported audio.
 - Long content scrolls vertically inside the card. Scroll to the top before swiping down to leave.
 - Keyboard equivalents and visually hidden assistive actions are available; reduced motion is respected.
 
