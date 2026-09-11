@@ -36,6 +36,16 @@ The browser tests use a 440 × 956 viewport for the iPhone 16 Pro Max layout. Ac
 - Long content scrolls vertically inside the card. Scroll to the top before swiping down to leave.
 - Keyboard equivalents and visually hidden assistive actions are available; reduced motion is respected.
 
+## Home screen navigation
+
+A bottom bar on the library screen only (not shown during study, to keep the card view distraction-free) has three tabs:
+
+- **Feedback** — opens a short note field and hands it to the Mail app via a `mailto:` link.
+- **Home** — the library itself; shown as the active tab.
+- **Settings** — pick a German pronunciation voice (when more than one is installed) and speaking speed, switch between Automatic/Light/Dark appearance, reset study progress, delete all decks, and see the app version.
+
+Reset and delete actions require a second tap within 3 seconds to confirm before anything changes.
+
 ## APKG import
 
 Choose **Import deck** in the library, then select an `.apkg` file in Files. Import runs in a background worker, and decks/media are saved together in IndexedDB. Removing the app removes its local data.

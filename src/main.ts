@@ -1,14 +1,16 @@
 import './style.css';
-import { loadDecks, saveImport, saveReviewed, mediaForDeck, moveToMemorized } from './storage';
-import type { Deck } from './model';
+import { loadDecks, saveImport, saveReviewed, mediaForDeck, moveToMemorized, loadSettings, saveSettings, resetProgress, wipeAllDecks } from './storage';
+import { defaultSettings, type AppSettings, type Deck, type ThemePreference } from './model';
 import { StudySession } from './session';
 import { cardContent } from './content';
 import { importFile } from './import/client';
 
+const APP_VERSION = '1.0 (1)';
 const app = document.querySelector<HTMLElement>('#app')!;
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let cleanup = () => {};
 let pendingNotice = '';
+let currentSettings: AppSettings = defaultSettings;
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = '') {
   const result = document.createElement(tag);
@@ -41,7 +43,155 @@ function speak(text: string) {
   speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'de-DE';
+  utterance.rate = currentSettings.speechRate;
+  const voice = currentSettings.voiceURI
+    ? speechSynthesis.getVoices().find(candidate => candidate.voiceURI === currentSettings.voiceURI)
+    : undefined;
+  if (voice) utterance.voice = voice;
   speechSynthesis.speak(utterance);
+}
+
+function applyTheme(theme: ThemePreference) {
+  if (theme === 'system') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', theme);
+}
+
+function navButton(label: string, icon: string, active: boolean, action: () => void) {
+  const result = button('', `nav-button${active ? ' active' : ''}`, action);
+  result.innerHTML = `${icon}<span>${label}</span>`;
+  result.setAttribute('aria-current', active ? 'page' : 'false');
+  return result;
+}
+
+const ICONS = {
+  feedback: '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 5h16v11H8l-4 4V5Z"/></svg>',
+  home: '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h5v-5h2v5h5v-9"/></svg>',
+  settings: '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.4M12 18.6V21M21 12h-2.4M5.4 12H3M18.1 5.9l-1.7 1.7M7.6 16.4l-1.7 1.7M18.1 18.1l-1.7-1.7M7.6 7.6 5.9 5.9"/></svg>',
+};
+
+function navBar(active: 'home' | 'settings') {
+  const nav = element('nav', 'nav-bar');
+  nav.setAttribute('aria-label', 'Main');
+  nav.append(
+    navButton('Feedback', ICONS.feedback, false, () => void feedbackScreen()),
+    navButton('Home', ICONS.home, active === 'home', () => { if (active !== 'home') void library(); }),
+    navButton('Settings', ICONS.settings, active === 'settings', () => { if (active !== 'settings') void settingsScreen(); }),
+  );
+  return nav;
+}
+
+async function feedbackScreen() {
+  const screen = element('section', 'panel');
+  const header = element('header', 'panel-header');
+  header.append(button('Back', 'back-button', () => void library()), element('h1', '', 'Feedback'));
+  const hint = element('p', 'panel-hint', 'Tell us what to fix or add. This opens your Mail app with your note ready to send.');
+  const input = document.createElement('textarea');
+  input.className = 'feedback-input';
+  input.rows = 8;
+  input.placeholder = 'What should we improve?';
+  const send = button('Open in Mail', 'primary-button', () => {
+    const subject = encodeURIComponent('Flashcards App Feedback');
+    const body = encodeURIComponent(input.value.trim());
+    location.href = `mailto:?subject=${subject}&body=${body}`;
+  });
+  screen.append(header, hint, input, send);
+  setScreen(screen);
+  cleanup = () => {};
+}
+
+async function settingsScreen() {
+  currentSettings = await loadSettings();
+  const screen = element('section', 'panel');
+  const header = element('header', 'panel-header');
+  header.append(button('Back', 'back-button', () => void library()), element('h1', '', 'Settings'));
+  screen.append(header);
+
+  const voiceGroup = element('div', 'settings-group');
+  voiceGroup.append(element('h2', 'settings-label', 'Pronunciation'));
+  const speechSupported = 'speechSynthesis' in window;
+  let populateVoices = () => {};
+  if (speechSupported) {
+    const voiceSelect = document.createElement('select');
+    voiceSelect.className = 'settings-select';
+    populateVoices = () => {
+      const voices = speechSynthesis.getVoices().filter(voice => voice.lang.toLowerCase().startsWith('de'));
+      const selected = currentSettings.voiceURI;
+      voiceSelect.replaceChildren();
+      const auto = document.createElement('option');
+      auto.value = ''; auto.textContent = 'Automatic (system default)';
+      voiceSelect.append(auto);
+      for (const voice of voices) {
+        const option = document.createElement('option');
+        option.value = voice.voiceURI; option.textContent = voice.name;
+        voiceSelect.append(option);
+      }
+      voiceSelect.value = voices.some(voice => voice.voiceURI === selected) ? selected : '';
+    };
+    populateVoices();
+    speechSynthesis.addEventListener('voiceschanged', populateVoices);
+    voiceSelect.addEventListener('change', () => {
+      currentSettings = { ...currentSettings, voiceURI: voiceSelect.value };
+      void saveSettings(currentSettings);
+    });
+    const rateLabel = element('p', 'settings-rate-label', 'Speaking speed');
+    const rateInput = document.createElement('input');
+    rateInput.type = 'range'; rateInput.className = 'settings-range';
+    rateInput.min = '0.6'; rateInput.max = '1.4'; rateInput.step = '0.05';
+    rateInput.value = String(currentSettings.speechRate);
+    rateInput.addEventListener('change', () => {
+      currentSettings = { ...currentSettings, speechRate: Number(rateInput.value) };
+      void saveSettings(currentSettings);
+    });
+    const test = button('Test voice', 'text-button', () => speak('der Entwurf'));
+    voiceGroup.append(voiceSelect, rateLabel, rateInput, test);
+  } else {
+    voiceGroup.append(element('p', 'settings-about', 'Pronunciation isn’t supported in this browser preview, but it works on your iPhone.'));
+  }
+
+  const themeGroup = element('div', 'settings-group');
+  themeGroup.append(element('h2', 'settings-label', 'Appearance'));
+  const themeRow = element('div', 'segmented');
+  const themeOptions: [ThemePreference, string][] = [['system', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']];
+  for (const [value, label] of themeOptions) {
+    const segment = button(label, `segment${currentSettings.theme === value ? ' active' : ''}`, () => {
+      currentSettings = { ...currentSettings, theme: value };
+      void saveSettings(currentSettings);
+      applyTheme(value);
+      themeRow.querySelectorAll('.segment').forEach(el => el.classList.remove('active'));
+      segment.classList.add('active');
+    });
+    themeRow.append(segment);
+  }
+  themeGroup.append(themeRow);
+
+  const dataGroup = element('div', 'settings-group');
+  dataGroup.append(element('h2', 'settings-label', 'Data'));
+  const confirmThenRun = (target: HTMLButtonElement, label: string, run: () => Promise<void>) => {
+    if (target.dataset.confirm === '1') {
+      target.disabled = true; target.textContent = 'Working…';
+      void run().then(() => { pendingNotice = `${label} — done.`; void library(); })
+        .catch(() => { target.disabled = false; target.textContent = label; delete target.dataset.confirm; target.classList.remove('confirming'); });
+      return;
+    }
+    target.dataset.confirm = '1';
+    target.textContent = 'Tap again to confirm';
+    target.classList.add('confirming');
+    setTimeout(() => {
+      if (target.dataset.confirm === '1') { delete target.dataset.confirm; target.textContent = label; target.classList.remove('confirming'); }
+    }, 3000);
+  };
+  const resetLabel = 'Reset study progress';
+  const resetButton = button(resetLabel, 'danger-button', () => confirmThenRun(resetButton, resetLabel, resetProgress));
+  const wipeLabel = 'Delete all decks';
+  const wipeButton = button(wipeLabel, 'danger-button', () => confirmThenRun(wipeButton, wipeLabel, wipeAllDecks));
+  dataGroup.append(resetButton, wipeButton);
+
+  const aboutGroup = element('div', 'settings-group');
+  aboutGroup.append(element('h2', 'settings-label', 'About'), element('p', 'settings-about', `Flashcards — version ${APP_VERSION}\nImport-only vocabulary study, built for iPhone.`));
+
+  screen.append(voiceGroup, themeGroup, dataGroup, aboutGroup);
+  setScreen(screen);
+  if (speechSupported) cleanup = () => speechSynthesis.removeEventListener('voiceschanged', populateVoices);
 }
 
 async function library() {
@@ -78,7 +228,7 @@ async function library() {
     const notice = element('p', 'notice', pendingNotice);
     notice.setAttribute('role', 'status');
     pendingNotice = '';
-    screen.append(header, list, hint, notice);
+    screen.append(header, list, hint, notice, navBar('home'));
     setScreen(screen);
     let active = true;
     cleanup = () => { active = false; };
@@ -328,4 +478,9 @@ async function study(deck: Deck) {
   } catch { pendingNotice = 'Some images or audio could not be loaded. Try reopening this deck.'; }
 }
 
-void library();
+async function bootstrap() {
+  currentSettings = await loadSettings();
+  applyTheme(currentSettings.theme);
+  await library();
+}
+void bootstrap();

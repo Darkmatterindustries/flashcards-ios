@@ -18,6 +18,10 @@ export interface Deck {
 export interface MediaFile { id: string; packageId: string; name: string; data: ArrayBuffer; mime: string }
 export interface ImportResult { decks: Deck[]; media: MediaFile[]; warnings: string[]; packageId: string }
 
+export type ThemePreference = 'system' | 'light' | 'dark';
+export interface AppSettings { voiceURI: string; speechRate: number; theme: ThemePreference }
+export const defaultSettings: AppSettings = { voiceURI: '', speechRate: 1, theme: 'system' };
+
 export function starterDeck(): Deck {
   return {
     id: 'starter', name: 'German Vocabulary', importedAt: 0, reviewed: [],

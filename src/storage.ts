@@ -1,10 +1,10 @@
 import { openDB, type DBSchema } from 'idb';
-import { starterDeck, type Deck, type ImportResult, type MediaFile } from './model';
+import { starterDeck, defaultSettings, type AppSettings, type Deck, type ImportResult, type MediaFile } from './model';
 
 interface LibraryDB extends DBSchema {
   decks: { key: string; value: Deck };
   media: { key: string; value: MediaFile; indexes: { package: string } };
-  settings: { key: string; value: boolean };
+  settings: { key: string; value: boolean | AppSettings };
 }
 
 const database = openDB<LibraryDB>('flashcards', 1, {
@@ -69,4 +69,35 @@ export async function moveToMemorized(sourceDeckId: string, cardId: string) {
 
 export async function mediaForDeck(deck: Deck) {
   return deck.packageId ? (await database).getAllFromIndex('media', 'package', deck.packageId) : [];
+}
+
+export async function loadSettings(): Promise<AppSettings> {
+  const stored = await (await database).get('settings', 'preferences');
+  return { ...defaultSettings, ...(stored as Partial<AppSettings> | undefined) };
+}
+
+export async function saveSettings(settings: AppSettings) {
+  await (await database).put('settings', settings, 'preferences');
+}
+
+/** Clears reviewed/memorized-progress markers on every deck; cards and decks themselves are untouched. */
+export async function resetProgress() {
+  const db = await database;
+  const tx = db.transaction('decks', 'readwrite');
+  let cursor = await tx.store.openCursor();
+  while (cursor) {
+    if (cursor.value.reviewed.length) await cursor.update({ ...cursor.value, reviewed: [] });
+    cursor = await cursor.continue();
+  }
+  await tx.done;
+}
+
+/** Deletes every deck and media file, then lets the next loadDecks() reseed the starter deck. */
+export async function wipeAllDecks() {
+  const db = await database;
+  const tx = db.transaction(['decks', 'media', 'settings'], 'readwrite');
+  await tx.objectStore('decks').clear();
+  await tx.objectStore('media').clear();
+  await tx.objectStore('settings').delete('seeded');
+  await tx.done;
 }
