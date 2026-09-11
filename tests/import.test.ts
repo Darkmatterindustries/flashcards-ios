@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fixture, sql } from './fixture';
 import { parseApkg } from '../src/import/apkg';
 import { renderNote, type NoteType } from '../src/import/templates';
@@ -36,6 +36,19 @@ describe('APKG import', () => {
     const data = await fixture();
     const a = await parseApkg(data, 'one.apkg', await sql), b = await parseApkg(data, 'renamed.apkg', await sql);
     expect(a.packageId).toBe(b.packageId);
+  });
+  it('imports over local HTTP with the same package IDs and media references', async () => {
+    const data = await fixture();
+    const normal = await parseApkg(data, 'deck.apkg', await sql);
+    vi.stubGlobal('crypto', {});
+    try {
+      const local = await parseApkg(data, 'deck.apkg', await sql);
+      expect(local.packageId).toBe(normal.packageId);
+      expect(local.decks.map(d => d.id)).toEqual(normal.decks.map(d => d.id));
+      expect(local.media.map(m => m.id)).toEqual(normal.media.map(m => m.id));
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

@@ -12,6 +12,8 @@ test('PDF study flow, tap flip, A/B loop, downward exit and session reset', asyn
   await page.goto('/');
   await expect(page.locator('.deck-tile')).toHaveCount(1);
   await expect(page.locator('.deck-count')).toHaveText('3 cards');
+  await expect(page.locator('.library-overview')).toHaveText('3 cards ready0 reviewed');
+  await expect(page.locator('.deck-cta')).toHaveText('Start studying');
   await page.locator('.deck-tile').click();
   await expect(page.locator('.card-counter')).toHaveText('1 / 3');
   // Every study-screen button is visually hidden, with one deliberate exception:

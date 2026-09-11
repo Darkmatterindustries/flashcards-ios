@@ -2,6 +2,10 @@ export interface Card {
   id: string;
   front: string;
   back: string;
+  example?: string;
+  tags?: string[];
+  difficult?: boolean;
+  schedule?: { due: number; intervalDays: number; reviews: number; lapses: number; lastReviewed: number };
 }
 
 export interface SessionSnapshot { order: string[]; queue: string[]; reviewed: string[] }
@@ -19,14 +23,16 @@ export interface Deck {
   shuffle?: boolean;
   /** In-progress session state, so leaving and reopening resumes the same queue. Cleared on completion. */
   activeSession?: SessionSnapshot;
+  activity?: Record<string, number>;
 }
 
 export interface MediaFile { id: string; packageId: string; name: string; data: ArrayBuffer; mime: string }
 export interface ImportResult { decks: Deck[]; media: MediaFile[]; warnings: string[]; packageId: string }
 
-export type ThemePreference = 'system' | 'light' | 'dark';
-export interface AppSettings { voiceURI: string; speechRate: number; theme: ThemePreference }
-export const defaultSettings: AppSettings = { voiceURI: '', speechRate: 1, theme: 'system' };
+export type ThemePreference = 'system' | 'light' | 'dark' | 'paper' | 'midnight' | 'forest' | 'rose' | 'ocean' | 'sunset' | 'lavender' | 'slate' | 'amber';
+export type BackgroundPreference = 'none' | 'aurora' | 'paper' | 'stars' | 'cubes' | 'orbits';
+export interface AppSettings { voiceURI: string; speechRate: number; theme: ThemePreference; preferRecordedAudio?: boolean; background?: BackgroundPreference; backgroundIntensity?: number; backgroundMotion?: boolean; dailyGoal?: number }
+export const defaultSettings: AppSettings = { voiceURI: '', speechRate: 1, theme: 'system', preferRecordedAudio: true, background: 'none', backgroundIntensity: 0.6 };
 
 export function starterDeck(): Deck {
   return {

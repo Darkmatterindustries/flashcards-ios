@@ -2,15 +2,21 @@ import './style.css';
 import {
   loadDecks, saveImport, saveReviewed, mediaForDeck, moveToMemorized, moveBackFromMemorized, unmarkReviewed,
   saveSessionState, setDeckShuffle, renameDeck, deleteDeck, loadSettings, saveSettings, resetProgress, wipeAllDecks,
-  replaceAllDecks,
+  replaceAllDecks, storageSummary,
 } from './storage';
-import { defaultSettings, type AppSettings, type Card, type Deck, type ImportResult, type ThemePreference } from './model';
+import { defaultSettings, type AppSettings, type BackgroundPreference, type Card, type Deck, type ImportResult, type ThemePreference } from './model';
 import { StudySession } from './session';
 import { cardContent } from './content';
 import { importFile } from './import/client';
+import { pronounce, stopPronunciation, recordingCount } from './pronunciation';
+import { plainText } from './speech-text';
+import { ambientScene } from './ambient';
+import { exportDeckToApkg, apkgFileName } from './export';
+import { dailyDashboard, studyHub } from './v3';
+import generatedAudioSummary from './generated-audio-summary.json';
 import {
   cloudAvailable, onAuthChange, signUp, signIn, signOutUser, pushAllDecks, pushSettings,
-  removeDeckFromCloud, clearAllCloudDecks, pullAll, type User,
+  removeDeckFromCloud, clearAllCloudDecks, pullAll, cloudStorageUsage, type User,
 } from './cloud';
 
 const APP_VERSION = '1.0 (1)';
@@ -20,15 +26,40 @@ let cleanup = () => {};
 let pendingNotice = '';
 let currentSettings: AppSettings = defaultSettings;
 let currentUser: User | null = null;
+let preferenceStatus = '';
+let cloudUsageCache: { uid: string; usage: Awaited<ReturnType<typeof cloudStorageUsage>> } | undefined;
+let preferenceQueue: Promise<void> = Promise.resolve();
+function reportPreferences(message: string) {
+  preferenceStatus = message;
+  document.querySelectorAll('.preference-sync-status').forEach(el => { el.textContent = message; });
+}
+function persistPreferences() {
+  const settings = { ...currentSettings };
+  const user = currentUser;
+  reportPreferences('Saving settings…');
+  preferenceQueue = preferenceQueue.then(async () => {
+    try { await saveSettings(settings); }
+    catch { reportPreferences('Settings could not be saved on this device. Check available storage.'); return; }
+    if (!user) { reportPreferences('Settings saved on this device. Sign in for cloud backup.'); return; }
+    try {
+      await pushSettings(user.uid, settings);
+      reportPreferences('Settings saved on this device and backed up to the cloud.');
+    } catch { reportPreferences('Settings saved on this device. Cloud backup failed—check your connection and try Sync now.'); }
+  });
+  return preferenceQueue;
+}
 
 async function syncAllToCloud() {
-  if (!currentUser) return;
+  if (!currentUser) return 'Sign in to back up your data.';
+  const user = currentUser;
   try {
-    await currentUser.getIdToken();
+    await user.getIdToken();
     const decks = await loadDecks();
-    await pushAllDecks(currentUser.uid, decks);
-    await pushSettings(currentUser.uid, currentSettings);
-  } catch { /* best-effort background sync */ }
+    await pushAllDecks(user.uid, decks);
+    await preferenceQueue;
+    await pushSettings(user.uid, currentSettings);
+    return `Backup completed at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Decks, progress and settings were uploaded.`;
+  } catch { return 'Backup did not complete. Check your connection and try again. Your local data is still available.'; }
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = '') {
@@ -46,33 +77,24 @@ function button(text: string, className: string, action: (event: MouseEvent) => 
 }
 
 function setScreen(screen: HTMLElement) {
+  stopPronunciation();
   cleanup(); cleanup = () => {};
   app.replaceChildren(screen);
-}
-
-/** Strips markup from a card face so it can be spoken; never inserted into the page. */
-function plainText(html: string) {
-  const holder = document.createElement('div');
-  holder.innerHTML = html.replace(/<br\s*\/?>/gi, ' ');
-  return (holder.textContent || '').replace(/\s+/g, ' ').trim();
+  screen.querySelectorAll('.card-face').forEach(face => face.prepend(ambientScene()));
 }
 
 function speak(text: string) {
-  if (!('speechSynthesis' in window) || !text) return;
-  speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = 'de-DE';
-  utterance.rate = currentSettings.speechRate;
-  const voice = currentSettings.voiceURI
-    ? speechSynthesis.getVoices().find(candidate => candidate.voiceURI === currentSettings.voiceURI)
-    : undefined;
-  if (voice) utterance.voice = voice;
-  speechSynthesis.speak(utterance);
+  pronounce(text, currentSettings);
 }
 
 function applyTheme(theme: ThemePreference) {
   if (theme === 'system') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', theme);
+  document.documentElement.dataset.background = currentSettings.background ?? 'none';
+  document.documentElement.dataset.backgroundMotion = currentSettings.backgroundMotion === false ? 'off' : 'on';
+  if (!document.body.querySelector(':scope > .ambient-scene')) document.body.prepend(ambientScene());
+  const intensity = currentSettings.backgroundIntensity;
+  document.documentElement.style.setProperty('--wallpaper-opacity', String(typeof intensity === 'number' && Number.isFinite(intensity) ? Math.max(0.2, Math.min(1, intensity)) : 0.6));
 }
 
 function shuffle<T>(items: T[]) {
@@ -95,9 +117,31 @@ function openDeckMenu(deck: Deck, onChanged: () => void) {
     sheet.replaceChildren(
       element('p', 'sheet-title', deck.name),
       button('Rename', 'sheet-action', showRenameForm),
+      button('Export deck', 'sheet-action', showExportConfirm),
       button('Delete deck', 'sheet-action danger', showDeleteConfirm),
       button('Cancel', 'sheet-action cancel', close),
     );
+  }
+  function showExportConfirm() {
+    const status = element('p', 'sheet-title', `Export “${deck.name}” as an .apkg file you can share or re-import elsewhere. Bundled images/audio aren’t included.`);
+    const exportButton = button('Export', 'sheet-action', async () => {
+      exportButton.disabled = true; exportButton.textContent = 'Preparing…';
+      try {
+        const blob = await exportDeckToApkg(deck);
+        const file = new File([blob], apkgFileName(deck.name), { type: 'application/octet-stream' });
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], title: deck.name });
+          close();
+          return;
+        }
+        status.textContent = 'Sharing files isn’t available in this browser preview, but it works on your iPhone.';
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') { close(); return; }
+        status.textContent = 'This deck could not be exported. Please try again.';
+      }
+      exportButton.disabled = false; exportButton.textContent = 'Export';
+    });
+    sheet.replaceChildren(status, exportButton, button('Cancel', 'sheet-action cancel', showMenu));
   }
   function showRenameForm() {
     const input = document.createElement('input');
@@ -185,17 +229,31 @@ async function settingsScreen() {
 
   const voiceGroup = element('div', 'settings-group');
   voiceGroup.append(element('h2', 'settings-label', 'Pronunciation'));
+  voiceGroup.append(element('p', 'settings-about', recordingCount
+    ? `${recordingCount} saved pronunciations. Other words use your device voice.`
+    : 'Your device voice is active. ElevenLabs audio will appear here once it has been generated.'));
+  const recordedLabel = element('label', 'audio-preference');
+  const recordedInput = element('input');
+  recordedInput.type = 'checkbox'; recordedInput.checked = currentSettings.preferRecordedAudio !== false;
+  recordedInput.addEventListener('change', () => {
+    stopPronunciation();
+    currentSettings = { ...currentSettings, preferRecordedAudio: recordedInput.checked };
+    void persistPreferences();
+  });
+  recordedLabel.append(recordedInput, document.createTextNode('Use saved audio when available'));
+  voiceGroup.append(recordedLabel);
   const speechSupported = 'speechSynthesis' in window;
   let populateVoices = () => {};
   if (speechSupported) {
     const voiceSelect = document.createElement('select');
     voiceSelect.className = 'settings-select';
+    voiceSelect.setAttribute('aria-label', 'Device voice');
     populateVoices = () => {
       const voices = speechSynthesis.getVoices().filter(voice => voice.lang.toLowerCase().startsWith('de'));
       const selected = currentSettings.voiceURI;
       voiceSelect.replaceChildren();
       const auto = document.createElement('option');
-      auto.value = ''; auto.textContent = 'Automatic (system default)';
+      auto.value = ''; auto.textContent = 'Automatic (prefer Premium / Enhanced)';
       voiceSelect.append(auto);
       for (const voice of voices) {
         const option = document.createElement('option');
@@ -208,16 +266,21 @@ async function settingsScreen() {
     speechSynthesis.addEventListener('voiceschanged', populateVoices);
     voiceSelect.addEventListener('change', () => {
       currentSettings = { ...currentSettings, voiceURI: voiceSelect.value };
-      void saveSettings(currentSettings);
+      void persistPreferences();
     });
-    const rateLabel = element('p', 'settings-rate-label', 'Speaking speed');
+    const rateLabel = element('label', 'settings-rate-label', `Speaking speed · ${currentSettings.speechRate.toFixed(2)}×`);
+    rateLabel.htmlFor = 'speech-rate';
     const rateInput = document.createElement('input');
     rateInput.type = 'range'; rateInput.className = 'settings-range';
+    rateInput.id = 'speech-rate';
     rateInput.min = '0.6'; rateInput.max = '1.4'; rateInput.step = '0.05';
     rateInput.value = String(currentSettings.speechRate);
-    rateInput.addEventListener('change', () => {
+    rateInput.addEventListener('input', () => {
       currentSettings = { ...currentSettings, speechRate: Number(rateInput.value) };
-      void saveSettings(currentSettings);
+      rateLabel.textContent = `Speaking speed · ${currentSettings.speechRate.toFixed(2)}×`;
+    });
+    rateInput.addEventListener('change', () => {
+      void persistPreferences();
     });
     const test = button('Test voice', 'text-button', () => speak('der Entwurf'));
     voiceGroup.append(voiceSelect, rateLabel, rateInput, test);
@@ -227,22 +290,113 @@ async function settingsScreen() {
 
   const themeGroup = element('div', 'settings-group');
   themeGroup.append(element('h2', 'settings-label', 'Appearance'));
-  const themeRow = element('div', 'segmented');
-  const themeOptions: [ThemePreference, string][] = [['system', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']];
+  const themeRow = element('div', 'theme-grid');
+  themeRow.setAttribute('aria-label', 'Appearance');
+  const themeOptions: [ThemePreference, string][] = [['system', 'Automatic'], ['light', 'Light'], ['dark', 'Dark'], ['paper', 'Warm paper'], ['midnight', 'Midnight blue'], ['forest', 'Forest'], ['rose', 'Rose'], ['ocean', 'Ocean'], ['sunset', 'Sunset'], ['lavender', 'Lavender'], ['slate', 'Slate'], ['amber', 'Amber']];
   for (const [value, label] of themeOptions) {
     const segment = button(label, `segment${currentSettings.theme === value ? ' active' : ''}`, () => {
       currentSettings = { ...currentSettings, theme: value };
-      void saveSettings(currentSettings);
+      void persistPreferences();
       applyTheme(value);
-      themeRow.querySelectorAll('.segment').forEach(el => el.classList.remove('active'));
+      themeRow.querySelectorAll('.segment').forEach(el => { el.classList.remove('active'); el.setAttribute('aria-pressed', 'false'); });
       segment.classList.add('active');
+      segment.setAttribute('aria-pressed', 'true');
     });
+    segment.dataset.palette = value;
+    segment.setAttribute('aria-pressed', String(currentSettings.theme === value));
+    const swatch = element('span', 'theme-swatch');
+    swatch.setAttribute('aria-hidden', 'true');
+    segment.prepend(swatch);
     themeRow.append(segment);
   }
   themeGroup.append(themeRow);
+  const backgroundHeading = element('h3', 'background-heading', 'Background');
+  const backgroundHint = element('p', 'settings-about', 'A little atmosphere for your library and study cards. Works with every theme.');
+  const backgroundGrid = element('div', 'background-grid');
+  backgroundGrid.setAttribute('role', 'group');
+  backgroundGrid.setAttribute('aria-label', 'Background');
+  const backgroundOptions: [BackgroundPreference, string, string][] = [
+    ['none', 'Plain', 'Clean and quiet'],
+    ['aurora', 'Soft glow', 'Blended gradients'],
+    ['paper', 'Paper texture', 'Subtle woven grain'],
+    ['stars', 'Starlight', 'A scatter of stars'],
+    ['cubes', 'Floating glass', 'Slowly turning 3D cubes'],
+    ['orbits', 'Orbital glow', 'Luminous rings in motion'],
+  ];
+  const intensityLabel = element('label', 'settings-rate-label background-intensity-label');
+  intensityLabel.htmlFor = 'background-intensity';
+  const intensityInput = element('input', 'settings-range');
+  intensityInput.type = 'range'; intensityInput.id = 'background-intensity';
+  intensityInput.min = '0.2'; intensityInput.max = '1'; intensityInput.step = '0.1';
+  intensityInput.value = String(currentSettings.backgroundIntensity ?? 0.6);
+  const updateBackgroundControls = () => {
+    const selected = currentSettings.background ?? 'none';
+    backgroundGrid.querySelectorAll<HTMLButtonElement>('button').forEach(choice => {
+      choice.setAttribute('aria-pressed', String(choice.dataset.wallpaper === selected));
+    });
+    intensityInput.disabled = selected === 'none';
+    intensityLabel.textContent = `Background intensity · ${Math.round(Number(intensityInput.value) * 100)}%`;
+  };
+  for (const [value, label, description] of backgroundOptions) {
+    const choice = button('', 'background-choice', () => {
+      currentSettings = { ...currentSettings, background: value };
+      applyTheme(currentSettings.theme);
+      updateBackgroundControls();
+      void persistPreferences();
+    });
+    choice.dataset.wallpaper = value;
+    choice.setAttribute('aria-label', label);
+    const preview = element('span', 'background-preview');
+    preview.setAttribute('aria-hidden', 'true');
+    preview.append(element('span', 'background-preview-card', 'Aa'));
+    choice.append(preview, element('span', 'background-name', label), element('span', 'background-description', description));
+    backgroundGrid.append(choice);
+  }
+  intensityInput.addEventListener('input', () => {
+    currentSettings = { ...currentSettings, backgroundIntensity: Number(intensityInput.value) };
+    applyTheme(currentSettings.theme);
+    updateBackgroundControls();
+  });
+  intensityInput.addEventListener('change', () => void persistPreferences());
+  updateBackgroundControls();
+  themeGroup.append(backgroundHeading, backgroundHint, backgroundGrid, intensityLabel, intensityInput);
+  const motionLabel = element('label', 'audio-preference');
+  const motionInput = element('input');
+  motionInput.type = 'checkbox'; motionInput.checked = currentSettings.backgroundMotion !== false;
+  motionInput.addEventListener('change', () => {
+    currentSettings = { ...currentSettings, backgroundMotion: motionInput.checked };
+    applyTheme(currentSettings.theme);
+    void persistPreferences();
+  });
+  motionLabel.append(motionInput, document.createTextNode('Animate 3D backgrounds'));
+  themeGroup.append(motionLabel, element('p', 'settings-about', 'Motion stays gentle and pauses when Reduce Motion is enabled.'));
 
   const dataGroup = element('div', 'settings-group');
   dataGroup.append(element('h2', 'settings-label', 'Data'));
+  const storageInfo = element('div', 'storage-summary');
+  const storageStatus = element('p', 'settings-about', 'Calculating storage…');
+  storageInfo.append(storageStatus);
+  const refreshStorage = async () => {
+    try {
+      const summary = await storageSummary();
+      const size = (bytes: number) => bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+      const lines = [
+        `${summary.decks} decks · ${summary.cards.toLocaleString()} cards`,
+        `Decks, progress and settings: approximately ${size(summary.textBytes)}`,
+        `Imported media: ${size(summary.mediaBytes)} (${summary.mediaCount} files)`,
+        `Pronunciation audio supplied with this build: ${size(generatedAudioSummary.bytes)} (${generatedAudioSummary.files.toLocaleString()} files). Live preview streams these from your computer; the normal IPA includes them.`,
+      ];
+      const { usage, quota } = summary.estimate ?? {};
+      if (typeof usage === 'number' && typeof quota === 'number' && quota > 0) {
+        lines.push(`Browser storage estimate: ${size(usage)} used of ${size(quota)} allowed.`, `Estimated available: ${size(Math.max(0, quota - usage))}.`);
+      } else lines.push('Storage allowance: not reported by this browser.');
+      lines.push('Content sizes exclude app files, generated pronunciation audio and database overhead. Browser estimates may include caches; they are not your iPhone’s total free space.');
+      storageStatus.textContent = lines.join('\n');
+    } catch { storageStatus.textContent = 'Storage information is unavailable right now.'; }
+  };
+  storageInfo.append(button('Refresh storage', 'text-button', () => void refreshStorage()));
+  dataGroup.append(storageInfo, element('p', 'settings-about storage-limits', 'Import limits per file: 100 MB package, 300 MB expanded content, 50,000 cards. There is no fixed total deck limit in the app; available device storage still applies.'));
+  void refreshStorage();
   const confirmThenRun = (target: HTMLButtonElement, label: string, run: () => Promise<void>) => {
     if (target.dataset.confirm === '1') {
       target.disabled = true; target.textContent = 'Working…';
@@ -268,13 +422,54 @@ async function settingsScreen() {
 
   const accountGroup = element('div', 'settings-group');
   accountGroup.append(element('h2', 'settings-label', 'Account & backup'));
+  accountGroup.append(element('p', 'settings-about', 'Backed up: decks, card text, progress, study sessions and preferences—including theme, background, intensity, animation and voice settings.\nNot backed up: imported images/audio or generated pronunciation files. Generated audio comes with the app build; Live loads it from the computer.\nThis is backup and restore, not live merging between devices. Cloud storage and service quota usage are not available in this app.'));
+  const preferenceNotice = element('p', 'settings-about preference-sync-status', preferenceStatus);
+  preferenceNotice.setAttribute('aria-live', 'polite');
+  accountGroup.append(preferenceNotice);
   if (!cloudAvailable()) {
     accountGroup.append(element('p', 'settings-about', 'Cloud backup isn’t set up for this build yet.'));
   } else if (currentUser) {
+    const meterUser = currentUser;
+    const cloudMeter = element('div', 'storage-summary cloud-storage-meter');
+    cloudMeter.append(element('h3', 'cloud-meter-title', 'Cloud backup size'));
+    const meterNumbers = element('p', 'cloud-meter-numbers', 'Checking saved cloud data…');
+    meterNumbers.setAttribute('aria-live', 'polite');
+    const meterBar = element('progress', 'cloud-meter-bar');
+    const freeStorageReference = 1024 ** 3;
+    meterBar.max = freeStorageReference;
+    meterBar.setAttribute('aria-label', 'Estimated backup content compared with the 1 GiB free storage reference');
+    const meterDetail = element('p', 'settings-about');
+    const refreshMeter = button('Refresh cloud usage', 'text-button', () => void updateCloudMeter(true));
+    async function updateCloudMeter(force = false) {
+      refreshMeter.disabled = true;
+      try {
+        const cached = cloudUsageCache;
+        const usage = !force && cached?.uid === meterUser.uid && Date.now() - cached.usage.checkedAt < 300000
+          ? cached.usage : await cloudStorageUsage(meterUser.uid);
+        if (currentUser?.uid !== meterUser.uid) return;
+        cloudUsageCache = { uid: meterUser.uid, usage };
+        meterBar.value = Math.min(usage.bytes, freeStorageReference);
+        const percent = usage.bytes / freeStorageReference * 100;
+        const used = usage.bytes === 0 ? '0 KB' : usage.bytes < 1024 ** 2 ? `${(usage.bytes / 1024).toFixed(1)} KB` : `${(usage.bytes / 1024 ** 2).toFixed(2)} MiB`;
+        const percentLabel = percent > 0 && percent < 0.01 ? '<0.01' : percent.toFixed(2);
+        meterNumbers.textContent = `${used} / 1,024 MiB reference · ${percentLabel}%`;
+        meterBar.setAttribute('aria-valuetext', meterNumbers.textContent);
+        meterDetail.textContent = `${usage.decks} cloud decks · ${usage.cards.toLocaleString()} cloud cards\nChecked ${new Date(usage.checkedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Estimated content size; excludes indexes, document overhead and other users. The 1 GiB free allowance is shared by the project, not reserved for your account. Paid plans can exceed it. Exact project usage and plan limits are available in Firebase Console.`;
+      } catch {
+        meterBar.hidden = true;
+        meterNumbers.textContent = 'Cloud usage could not be checked.';
+        meterDetail.textContent = 'Check your connection and try again. An unavailable reading does not mean your backup is empty.';
+      } finally { refreshMeter.disabled = false; }
+    }
+    refreshMeter.addEventListener('click', () => { meterBar.hidden = false; });
+    cloudMeter.append(meterNumbers, meterBar, meterDetail, refreshMeter);
+    accountGroup.append(cloudMeter);
+    void updateCloudMeter();
     const status = element('p', 'settings-about', `Signed in as ${currentUser.email}\nYour decks and progress back up automatically.`);
     const syncButton = button('Sync now', 'text-button', async () => {
       syncButton.disabled = true; syncButton.textContent = 'Syncing…';
-      await syncAllToCloud();
+      status.textContent = await syncAllToCloud();
+      await updateCloudMeter(true);
       syncButton.disabled = false; syncButton.textContent = 'Sync now';
     });
     const signOutButton = button('Sign out', 'danger-button', async () => { await signOutUser(); void settingsScreen(); });
@@ -318,7 +513,7 @@ async function resolveSignIn() {
   if (!cloud.decks.length) { void syncAllToCloud(); return; }
   const applyCloud = async () => {
     await replaceAllDecks(cloud.decks as Deck[]);
-    if (cloud.settings) { currentSettings = cloud.settings; await saveSettings(currentSettings); applyTheme(currentSettings.theme); }
+    if (cloud.settings) { currentSettings = { ...defaultSettings, ...cloud.settings }; await saveSettings(currentSettings); applyTheme(currentSettings.theme); }
     pendingNotice = 'Restored your decks and progress from the cloud.';
     void library();
   };
@@ -351,7 +546,7 @@ function deckTile(deck: Deck) {
   fill.style.width = `${deck.cards.length ? reviewed / deck.cards.length * 100 : 0}%`;
   track.append(fill);
   const resumeNote = deck.activeSession ? element('p', 'resume-note', 'Tap to resume') : undefined;
-  main.append(row, element('p', 'reviewed', `${reviewed} reviewed`), track);
+  main.append(row, element('p', 'reviewed', `${reviewed} reviewed`), track, element('span', 'deck-cta', deck.activeSession ? 'Resume session' : 'Start studying'));
   if (resumeNote) main.append(resumeNote);
   main.setAttribute('aria-label', `${deck.name}, ${deck.cards.length} cards, ${reviewed} reviewed${deck.activeSession ? ', session in progress' : ''}. Start studying.`);
   const controls = element('div', 'tile-controls');
@@ -370,6 +565,20 @@ function deckTile(deck: Deck) {
   return tile;
 }
 
+function openStudyHub(deckId?: string) {
+  void studyHub({
+    show: (screen, dispose) => { setScreen(screen); cleanup = dispose ?? (() => {}); },
+    back: () => void library(),
+    quick: deck => void study(deck),
+    settingsChanged: async settings => {
+      currentSettings = settings;
+      applyTheme(settings.theme);
+      await persistPreferences();
+    },
+    changed: () => {},
+  }, deckId);
+}
+
 async function library() {
   try {
     const decks = await loadDecks();
@@ -385,6 +594,14 @@ async function library() {
     picker.setAttribute('aria-label', 'Choose an Anki package');
     const importButton = button('Import deck', 'import-button', () => picker.click());
     header.append(importButton, picker);
+    const totalCards = decks.reduce((sum, deck) => sum + deck.cards.length, 0);
+    const reviewedCards = decks.reduce((sum, deck) => sum + Math.min(deck.reviewed.length, deck.cards.length), 0);
+    const overview = element('div', 'library-overview');
+    overview.append(
+      element('strong', '', `${totalCards} card${totalCards === 1 ? '' : 's'} ready`),
+      element('span', '', `${reviewedCards} reviewed`),
+    );
+    const dashboard = dailyDashboard(decks, currentSettings, () => openStudyHub());
     const search = document.createElement('input');
     search.type = 'search'; search.className = 'search-input'; search.placeholder = 'Search decks';
     search.setAttribute('aria-label', 'Search decks');
@@ -403,7 +620,7 @@ async function library() {
     const notice = element('p', 'notice', pendingNotice);
     notice.setAttribute('role', 'status');
     pendingNotice = '';
-    screen.append(header, search, list, empty, hint, notice, navBar('home'));
+    screen.append(header, overview, dashboard, search, list, empty, hint, notice, navBar('home'));
     setScreen(screen);
     if (currentUser) void syncAllToCloud();
     let active = true;
@@ -504,7 +721,7 @@ async function study(deck: Deck) {
   const count = element('span', 'card-counter');
   count.setAttribute('aria-hidden', 'true');
   const speechSupported = 'speechSynthesis' in window;
-  const speakButton = speechSupported ? element('button', 'speak-button', '') : undefined;
+  const speakButton = speechSupported || recordingCount > 0 ? element('button', 'speak-button', '') : undefined;
   if (speakButton) {
     speakButton.type = 'button';
     speakButton.setAttribute('aria-label', 'Hear pronunciation');
@@ -537,6 +754,7 @@ async function study(deck: Deck) {
   let playing: HTMLAudioElement[] = [];
   const stopAudio = () => { playing.forEach(audio => { audio.pause(); audio.src = ''; }); playing = []; };
   const playAudio = () => {
+    stopPronunciation();
     stopAudio();
     const urls = sounds[flipped ? 'back' : 'front'];
     const next = (index: number) => {
@@ -551,6 +769,7 @@ async function study(deck: Deck) {
   speakButton?.addEventListener('click', event => {
     event.stopPropagation();
     if (busy || disposed || !session.current) return;
+    stopAudio();
     speak(plainText(session.current.front));
   });
   const refreshAccessibility = () => {
@@ -629,7 +848,7 @@ async function study(deck: Deck) {
     busy = true;
     hideUndo();
     stopAudio();
-    if (speechSupported) speechSynthesis.cancel();
+    stopPronunciation();
     shell.style.transition = reduceMotion.matches ? 'none' : 'transform 180ms ease-out, opacity 180ms ease-out';
     shell.style.transform = `translateX(${direction === 'left' ? '-110' : '110'}vw) rotate(${direction === 'left' ? '-8' : '8'}deg)`;
     shell.style.opacity = '0';
@@ -714,7 +933,7 @@ async function study(deck: Deck) {
   window.addEventListener('keydown', keydown);
   cleanup = () => {
     disposed = true; clearTimeout(timer); clearTimeout(undoTimer); stopAudio();
-    if (speechSupported) speechSynthesis.cancel();
+    stopPronunciation();
     media.clear();
     window.removeEventListener('keydown', keydown);
   };
@@ -743,7 +962,8 @@ async function bootstrap() {
   applyTheme(currentSettings.theme);
   onAuthChange(user => { currentUser = user; });
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') void syncAllToCloud();
+    document.documentElement.dataset.pageHidden = String(document.hidden);
+    if (document.visibilityState === 'hidden') { stopPronunciation(); void syncAllToCloud(); }
   });
   await library();
 }

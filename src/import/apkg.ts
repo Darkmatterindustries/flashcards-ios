@@ -92,7 +92,11 @@ export async function parseApkg(bytes: Uint8Array, filename: string, sql: SqlJsS
   if (!collection) throw new Error('This file does not contain an Anki deck. Export it again as .apkg.');
   const databaseBytes = modern ? unzstd(collection, MAX_EXPANDED_BYTES) : collection;
   if (decoder.decode(databaseBytes.subarray(0, 15)) !== 'SQLite format 3') throw new Error('The Anki collection is damaged or unsupported.');
-  const hash = await crypto.subtle.digest('SHA-256', bytes.slice().buffer);
+  // Local HTTP previews do not expose SubtleCrypto. Keep identical package IDs
+  // there so duplicate detection and media references match the offline app.
+  const hash = globalThis.crypto?.subtle
+    ? await crypto.subtle.digest('SHA-256', bytes.slice().buffer)
+    : (await import('@noble/hashes/sha2.js')).sha256(bytes);
   const packageId = Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
   const db = new sql.Database(databaseBytes);
   const decks = new Map<string, Deck>();

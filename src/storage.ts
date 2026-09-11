@@ -1,5 +1,46 @@
 import { openDB, type DBSchema } from 'idb';
 import { starterDeck, defaultSettings, type AppSettings, type Deck, type ImportResult, type MediaFile, type SessionSnapshot } from './model';
+import type { Card } from './model';
+import { nextSchedule, localDay, type Rating } from './review';
+
+export async function editCard(deckId: string, cardId: string, changes: Pick<Card, 'front' | 'back' | 'example' | 'tags' | 'difficult'>) {
+  const db = await database;
+  const tx = db.transaction('decks', 'readwrite');
+  const deck = await tx.store.get(deckId);
+  const card = deck?.cards.find(c => c.id === cardId);
+  if (!deck || !card) throw new Error('This card is no longer in the deck.');
+  Object.assign(card, changes);
+  await tx.store.put(deck);
+  await tx.done;
+}
+
+export async function recordActivity(deckId: string, delta = 1) {
+  const db = await database;
+  const tx = db.transaction('decks', 'readwrite');
+  const deck = await tx.store.get(deckId);
+  if (deck) {
+    const day = localDay();
+    deck.activity ??= {};
+    deck.activity[day] = Math.max(0, (deck.activity[day] ?? 0) + delta);
+    await tx.store.put(deck);
+  }
+  await tx.done;
+}
+
+export async function rateCard(deckId: string, cardId: string, rating: Rating) {
+  const db = await database;
+  const tx = db.transaction('decks', 'readwrite');
+  const deck = await tx.store.get(deckId);
+  const card = deck?.cards.find(c => c.id === cardId);
+  if (!deck || !card) throw new Error('This card is no longer in the deck.');
+  card.schedule = nextSchedule(card.schedule, rating);
+  const day = localDay();
+  deck.activity ??= {};
+  deck.activity[day] = (deck.activity[day] ?? 0) + 1;
+  await tx.store.put(deck);
+  await tx.done;
+  return card.schedule;
+}
 
 interface LibraryDB extends DBSchema {
   decks: { key: string; value: Deck };
@@ -160,6 +201,25 @@ export async function loadSettings(): Promise<AppSettings> {
 
 export async function saveSettings(settings: AppSettings) {
   await (await database).put('settings', settings, 'preferences');
+}
+
+/** Content sizes exclude database indexes/overhead; browser quota is separate. */
+export async function storageSummary() {
+  const db = await database;
+  const tx = db.transaction(['decks', 'media', 'settings'], 'readonly');
+  const decks = await tx.objectStore('decks').getAll();
+  const settings = await tx.objectStore('settings').getAll();
+  let mediaBytes = 0, mediaCount = 0;
+  let cursor = await tx.objectStore('media').openCursor();
+  while (cursor) {
+    mediaBytes += cursor.value.data.byteLength;
+    mediaCount++;
+    cursor = await cursor.continue();
+  }
+  await tx.done;
+  const textBytes = new TextEncoder().encode(JSON.stringify({ decks, settings })).byteLength;
+  const estimate = await navigator.storage?.estimate?.().catch(() => undefined);
+  return { decks: decks.length, cards: decks.reduce((n, deck) => n + deck.cards.length, 0), textBytes, mediaBytes, mediaCount, estimate };
 }
 
 /** Clears reviewed/memorized-progress markers on every deck; cards and decks themselves are untouched. */
