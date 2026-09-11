@@ -69,8 +69,15 @@ h1 { font-size: 25px; letter-spacing: -.8px; font-weight: 700; line-height: 1.2;
   border: 0; padding: 9px 0 9px 12px; color: #3f7fcf; background: none; font-size: 14px; font-weight: 600;
 }
 .deck-list { display: grid; gap: 18px; }
-.deck-tile { display: block; width: 100%; text-align: left; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: 23px; padding: 24px; transition: transform 120ms, background 120ms; }
-.deck-tile:active { transform: scale(.985); }
+.deck-tile { position: relative; }
+.deck-tile-main { display: block; width: 100%; text-align: left; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: 23px; padding: 24px; padding-right: 88px; transition: transform 120ms, background 120ms; }
+.deck-tile-main:active { transform: scale(.985); }
+.resume-note { font-size: 12px; font-weight: 600; color: var(--blue); margin-top: 10px; }
+.tile-controls { position: absolute; top: 16px; right: 16px; display: flex; gap: 6px; }
+.tile-icon-button { width: 34px; height: 34px; border-radius: 50%; border: 0; display: flex; align-items: center; justify-content: center; background: var(--accent-bg); color: var(--accent-text); }
+.tile-icon-button.shuffle-active { background: var(--blue); color: #fff; }
+.tile-icon-button:active { filter: brightness(.95); }
+.search-input { display: block; width: 100%; min-height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text); padding: 0 14px; margin-bottom: 18px; }
 .deck-row { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; }
 .deck-row h2 { font-size: 16px; line-height: 1.35; font-weight: 650; overflow-wrap: anywhere; }
 .deck-count { font-size: 13px; color: var(--muted); flex-shrink: 0; }
@@ -147,6 +154,28 @@ h1 { font-size: 25px; letter-spacing: -.8px; font-weight: 700; line-height: 1.2;
 .danger-button.confirming { background: var(--danger-text); color: white; }
 .settings-about { font-size: 13px; color: var(--muted); line-height: 1.7; white-space: pre-line; }
 .feedback-input { display: block; width: 100%; min-height: 160px; border-radius: 16px; border: 1px solid var(--border); background: var(--surface); padding: 14px; font: inherit; color: var(--text); resize: vertical; margin-bottom: 18px; }
+.preview-deck-list { display: grid; gap: 10px; margin-bottom: 28px; }
+.preview-deck-row { display: flex; justify-content: space-between; gap: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; font-size: 14px; }
+.preview-warnings { margin: 0; padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.preview-warnings li + li { margin-top: 6px; }
+
+.sheet-backdrop { position: fixed; inset: 0; z-index: 10; display: flex; align-items: flex-end; background: rgba(0, 0, 0, .38); }
+.sheet { width: 100%; background: var(--surface); border-radius: 22px 22px 0 0; padding: 20px 20px calc(env(safe-area-inset-bottom, 0px) + 20px); display: grid; gap: 10px; }
+.sheet-title { font-size: 14px; font-weight: 700; color: var(--muted); text-align: center; margin-bottom: 4px; overflow-wrap: anywhere; }
+.sheet-action { display: block; width: 100%; border: 0; border-radius: 14px; background: var(--bg); color: var(--text); min-height: 50px; font-weight: 600; font-size: 15px; }
+.sheet-action.danger { color: var(--danger-text); }
+.sheet-action.cancel { color: var(--muted); }
+.sheet-input { display: block; width: 100%; min-height: 46px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); padding: 0 14px; text-align: center; margin-bottom: 4px; }
+
+.toast {
+  position: absolute; left: 20px; right: 20px; bottom: calc(env(safe-area-inset-bottom, 0px) + 24px); z-index: 4;
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  background: rgba(20, 22, 28, .92); color: #fff; border-radius: 16px; padding: 6px 6px 6px 18px;
+  transform: translateY(120%); opacity: 0; transition: transform 220ms ease, opacity 220ms ease; pointer-events: none;
+}
+.toast.visible { transform: translateY(0); opacity: 1; pointer-events: auto; }
+.toast-message { font-size: 13px; font-weight: 600; }
+.toast-undo { border: 0; background: none; color: #7db4f5; font-weight: 700; font-size: 13px; min-height: 44px; padding: 8px 10px; }
 
 .nav-bar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;

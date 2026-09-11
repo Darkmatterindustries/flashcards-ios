@@ -4,6 +4,8 @@ export interface Card {
   back: string;
 }
 
+export interface SessionSnapshot { order: string[]; queue: string[]; reviewed: string[] }
+
 export interface Deck {
   id: string;
   name: string;
@@ -13,6 +15,10 @@ export interface Deck {
   packageId?: string;
   /** Id of the deck this one collects memorized (swiped-right) cards from, if any. */
   memorizedFor?: string;
+  /** Whether a fresh session for this deck starts in random order. */
+  shuffle?: boolean;
+  /** In-progress session state, so leaving and reopening resumes the same queue. Cleared on completion. */
+  activeSession?: SessionSnapshot;
 }
 
 export interface MediaFile { id: string; packageId: string; name: string; data: ArrayBuffer; mime: string }

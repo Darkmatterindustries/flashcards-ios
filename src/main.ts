@@ -1,9 +1,17 @@
 import './style.css';
-import { loadDecks, saveImport, saveReviewed, mediaForDeck, moveToMemorized, loadSettings, saveSettings, resetProgress, wipeAllDecks } from './storage';
-import { defaultSettings, type AppSettings, type Deck, type ThemePreference } from './model';
+import {
+  loadDecks, saveImport, saveReviewed, mediaForDeck, moveToMemorized, moveBackFromMemorized, unmarkReviewed,
+  saveSessionState, setDeckShuffle, renameDeck, deleteDeck, loadSettings, saveSettings, resetProgress, wipeAllDecks,
+  replaceAllDecks,
+} from './storage';
+import { defaultSettings, type AppSettings, type Card, type Deck, type ImportResult, type ThemePreference } from './model';
 import { StudySession } from './session';
 import { cardContent } from './content';
 import { importFile } from './import/client';
+import {
+  cloudAvailable, onAuthChange, signUp, signIn, signOutUser, pushAllDecks, pushSettings,
+  removeDeckFromCloud, clearAllCloudDecks, pullAll, type User,
+} from './cloud';
 
 const APP_VERSION = '1.0 (1)';
 const app = document.querySelector<HTMLElement>('#app')!;
@@ -11,6 +19,17 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let cleanup = () => {};
 let pendingNotice = '';
 let currentSettings: AppSettings = defaultSettings;
+let currentUser: User | null = null;
+
+async function syncAllToCloud() {
+  if (!currentUser) return;
+  try {
+    await currentUser.getIdToken();
+    const decks = await loadDecks();
+    await pushAllDecks(currentUser.uid, decks);
+    await pushSettings(currentUser.uid, currentSettings);
+  } catch { /* best-effort background sync */ }
+}
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = '') {
   const result = document.createElement(tag);
@@ -19,7 +38,7 @@ function element<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', 
   return result;
 }
 
-function button(text: string, className: string, action: () => void) {
+function button(text: string, className: string, action: (event: MouseEvent) => void) {
   const result = element('button', className, text);
   result.type = 'button';
   result.addEventListener('click', action);
@@ -56,6 +75,62 @@ function applyTheme(theme: ThemePreference) {
   else document.documentElement.setAttribute('data-theme', theme);
 }
 
+function shuffle<T>(items: T[]) {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return items;
+}
+
+/** A small bottom sheet for renaming or deleting one deck; closes on backdrop tap. */
+function openDeckMenu(deck: Deck, onChanged: () => void) {
+  const backdrop = element('div', 'sheet-backdrop');
+  const sheet = element('div', 'sheet');
+  backdrop.append(sheet);
+  backdrop.addEventListener('click', event => { if (event.target === backdrop) close(); });
+  document.body.append(backdrop);
+  function close() { backdrop.remove(); }
+  function showMenu() {
+    sheet.replaceChildren(
+      element('p', 'sheet-title', deck.name),
+      button('Rename', 'sheet-action', showRenameForm),
+      button('Delete deck', 'sheet-action danger', showDeleteConfirm),
+      button('Cancel', 'sheet-action cancel', close),
+    );
+  }
+  function showRenameForm() {
+    const input = document.createElement('input');
+    input.type = 'text'; input.className = 'sheet-input'; input.maxLength = 120; input.value = deck.name;
+    sheet.replaceChildren(
+      element('p', 'sheet-title', 'Rename deck'),
+      input,
+      button('Save', 'sheet-action', async () => {
+        const name = input.value.trim();
+        if (name && name !== deck.name) { await renameDeck(deck.id, name); onChanged(); }
+        close();
+      }),
+      button('Cancel', 'sheet-action cancel', showMenu),
+    );
+    input.focus(); input.select();
+  }
+  function showDeleteConfirm() {
+    sheet.replaceChildren(
+      element('p', 'sheet-title', `Delete “${deck.name}”? This can’t be undone.`),
+      button('Delete', 'sheet-action danger', async () => {
+        await deleteDeck(deck.id);
+        if (currentUser) {
+          void removeDeckFromCloud(currentUser.uid, deck.id).catch(() => {});
+          void removeDeckFromCloud(currentUser.uid, `${deck.id}::memorized`).catch(() => {});
+        }
+        onChanged(); close();
+      }),
+      button('Cancel', 'sheet-action cancel', showMenu),
+    );
+  }
+  showMenu();
+}
+
 function navButton(label: string, icon: string, active: boolean, action: () => void) {
   const result = button('', `nav-button${active ? ' active' : ''}`, action);
   result.innerHTML = `${icon}<span>${label}</span>`;
@@ -67,6 +142,8 @@ const ICONS = {
   feedback: '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 5h16v11H8l-4 4V5Z"/></svg>',
   home: '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9h5v-5h2v5h5v-9"/></svg>',
   settings: '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.4M12 18.6V21M21 12h-2.4M5.4 12H3M18.1 5.9l-1.7 1.7M7.6 16.4l-1.7 1.7M18.1 18.1l-1.7-1.7M7.6 7.6 5.9 5.9"/></svg>',
+  menu: '<svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
+  shuffle: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17h3l9-11h4"/><path d="M4 7h3l2.5 3"/><path d="M14.5 14 16 15.8"/><path d="M17 4l3 2-3 2"/><path d="M17 16l3 2-3 2"/></svg>',
 };
 
 function navBar(active: 'home' | 'settings') {
@@ -183,15 +260,114 @@ async function settingsScreen() {
   const resetLabel = 'Reset study progress';
   const resetButton = button(resetLabel, 'danger-button', () => confirmThenRun(resetButton, resetLabel, resetProgress));
   const wipeLabel = 'Delete all decks';
-  const wipeButton = button(wipeLabel, 'danger-button', () => confirmThenRun(wipeButton, wipeLabel, wipeAllDecks));
+  const wipeButton = button(wipeLabel, 'danger-button', () => confirmThenRun(wipeButton, wipeLabel, async () => {
+    await wipeAllDecks();
+    if (currentUser) void clearAllCloudDecks(currentUser.uid).catch(() => {});
+  }));
   dataGroup.append(resetButton, wipeButton);
+
+  const accountGroup = element('div', 'settings-group');
+  accountGroup.append(element('h2', 'settings-label', 'Account & backup'));
+  if (!cloudAvailable()) {
+    accountGroup.append(element('p', 'settings-about', 'Cloud backup isn’t set up for this build yet.'));
+  } else if (currentUser) {
+    const status = element('p', 'settings-about', `Signed in as ${currentUser.email}\nYour decks and progress back up automatically.`);
+    const syncButton = button('Sync now', 'text-button', async () => {
+      syncButton.disabled = true; syncButton.textContent = 'Syncing…';
+      await syncAllToCloud();
+      syncButton.disabled = false; syncButton.textContent = 'Sync now';
+    });
+    const signOutButton = button('Sign out', 'danger-button', async () => { await signOutUser(); void settingsScreen(); });
+    accountGroup.append(status, syncButton, signOutButton);
+  } else {
+    const emailInput = document.createElement('input');
+    emailInput.type = 'email'; emailInput.className = 'settings-select'; emailInput.placeholder = 'Email'; emailInput.autocomplete = 'email';
+    const passwordInput = document.createElement('input');
+    passwordInput.type = 'password'; passwordInput.className = 'settings-select'; passwordInput.placeholder = 'Password (6+ characters)'; passwordInput.autocomplete = 'current-password';
+    const status = element('p', 'settings-about', '');
+    const attempt = (run: (email: string, password: string) => Promise<void>) => async () => {
+      status.textContent = 'Working…';
+      try { await run(emailInput.value.trim(), passwordInput.value); status.textContent = ''; void settingsScreen(); }
+      catch (error) { status.textContent = error instanceof Error ? error.message : 'Something went wrong. Please try again.'; }
+    };
+    const loginButton = button('Log in', 'primary-button', attempt(async (email, password) => { await signIn(email, password); await resolveSignIn(); }));
+    const signupButton = button('Create account', 'text-button', attempt(async (email, password) => { await signUp(email, password); await resolveSignIn(); }));
+    accountGroup.append(
+      element('p', 'settings-about', 'Sign in to back up your decks and progress, and restore them after reinstalling.'),
+      emailInput, passwordInput, loginButton, signupButton, status,
+    );
+  }
 
   const aboutGroup = element('div', 'settings-group');
   aboutGroup.append(element('h2', 'settings-label', 'About'), element('p', 'settings-about', `Flashcards — version ${APP_VERSION}\nImport-only vocabulary study, built for iPhone.`));
 
-  screen.append(voiceGroup, themeGroup, dataGroup, aboutGroup);
+  screen.append(voiceGroup, themeGroup, dataGroup, accountGroup, aboutGroup);
   setScreen(screen);
   if (speechSupported) cleanup = () => speechSynthesis.removeEventListener('voiceschanged', populateVoices);
+}
+
+/** After sign-in: silently restore an empty device from the cloud, otherwise ask which copy to keep. */
+async function resolveSignIn() {
+  if (!currentUser) return;
+  const uid = currentUser.uid;
+  // Right after sign-in/sign-up, Firestore's first request can race the auth
+  // token becoming available and get rejected even with correct rules.
+  // Forcing a fresh token first ensures it's actually attached.
+  await currentUser.getIdToken();
+  const [localDecks, cloud] = await Promise.all([loadDecks(), pullAll(uid)]);
+  if (!cloud.decks.length) { void syncAllToCloud(); return; }
+  const applyCloud = async () => {
+    await replaceAllDecks(cloud.decks as Deck[]);
+    if (cloud.settings) { currentSettings = cloud.settings; await saveSettings(currentSettings); applyTheme(currentSettings.theme); }
+    pendingNotice = 'Restored your decks and progress from the cloud.';
+    void library();
+  };
+  const localIsFresh = localDecks.length === 1 && localDecks[0].id === 'starter' && localDecks[0].reviewed.length === 0;
+  if (localIsFresh) { await applyCloud(); return; }
+  openConflictSheet(() => void syncAllToCloud(), () => void applyCloud());
+}
+
+function openConflictSheet(keepLocal: () => void, useCloud: () => void) {
+  const backdrop = element('div', 'sheet-backdrop');
+  const sheet = element('div', 'sheet');
+  sheet.append(
+    element('p', 'sheet-title', 'This account already has a backup, and this device also has its own decks. Which should we keep?'),
+    button('Use the cloud backup', 'sheet-action danger', () => { backdrop.remove(); useCloud(); }),
+    button('Keep this device’s decks', 'sheet-action', () => { backdrop.remove(); keepLocal(); }),
+  );
+  backdrop.append(sheet);
+  document.body.append(backdrop);
+}
+
+function deckTile(deck: Deck) {
+  const tile = element('div', 'deck-tile');
+  const main = button('', 'deck-tile-main', () => void study(deck));
+  const row = element('div', 'deck-row');
+  row.append(element('h2', '', deck.name), element('span', 'deck-count', `${deck.cards.length} cards`));
+  const reviewed = Math.min(deck.reviewed.length, deck.cards.length);
+  const track = element('div', 'progress-track');
+  track.setAttribute('aria-hidden', 'true');
+  const fill = element('div', 'progress-fill');
+  fill.style.width = `${deck.cards.length ? reviewed / deck.cards.length * 100 : 0}%`;
+  track.append(fill);
+  const resumeNote = deck.activeSession ? element('p', 'resume-note', 'Tap to resume') : undefined;
+  main.append(row, element('p', 'reviewed', `${reviewed} reviewed`), track);
+  if (resumeNote) main.append(resumeNote);
+  main.setAttribute('aria-label', `${deck.name}, ${deck.cards.length} cards, ${reviewed} reviewed${deck.activeSession ? ', session in progress' : ''}. Start studying.`);
+  const controls = element('div', 'tile-controls');
+  const shuffleButton = button('', `tile-icon-button${deck.shuffle ? ' shuffle-active' : ''}`, event => {
+    event.stopPropagation();
+    void setDeckShuffle(deck.id, !deck.shuffle).then(() => void library());
+  });
+  shuffleButton.innerHTML = ICONS.shuffle;
+  shuffleButton.setAttribute('aria-pressed', String(!!deck.shuffle));
+  shuffleButton.setAttribute('aria-label', `${deck.shuffle ? 'Disable' : 'Enable'} shuffle for ${deck.name}`);
+  const menuButton = button('', 'tile-icon-button', event => { event.stopPropagation(); openDeckMenu(deck, () => void library()); });
+  menuButton.innerHTML = ICONS.menu;
+  menuButton.setAttribute('aria-label', `More options for ${deck.name}`);
+  controls.append(shuffleButton, menuButton);
+  tile.append(main, controls);
+  return tile;
 }
 
 async function library() {
@@ -209,27 +385,27 @@ async function library() {
     picker.setAttribute('aria-label', 'Choose an Anki package');
     const importButton = button('Import deck', 'import-button', () => picker.click());
     header.append(importButton, picker);
+    const search = document.createElement('input');
+    search.type = 'search'; search.className = 'search-input'; search.placeholder = 'Search decks';
+    search.setAttribute('aria-label', 'Search decks');
     const list = element('div', 'deck-list');
-    for (const deck of decks) {
-      const tile = button('', 'deck-tile', () => void study(deck));
-      const row = element('div', 'deck-row');
-      row.append(element('h2', '', deck.name), element('span', 'deck-count', `${deck.cards.length} cards`));
-      const reviewed = Math.min(deck.reviewed.length, deck.cards.length);
-      const track = element('div', 'progress-track');
-      track.setAttribute('aria-hidden', 'true');
-      const fill = element('div', 'progress-fill');
-      fill.style.width = `${deck.cards.length ? reviewed / deck.cards.length * 100 : 0}%`;
-      track.append(fill);
-      tile.append(row, element('p', 'reviewed', `${reviewed} reviewed`), track);
-      tile.setAttribute('aria-label', `${deck.name}, ${deck.cards.length} cards, ${reviewed} reviewed. Start studying.`);
-      list.append(tile);
-    }
+    const empty = element('p', 'library-hint', 'No decks match your search.');
+    const renderList = (query: string) => {
+      const needle = query.trim().toLowerCase();
+      const matches = needle ? decks.filter(deck => deck.name.toLowerCase().includes(needle)) : decks;
+      list.replaceChildren(...matches.map(deckTile));
+      empty.textContent = decks.length === 0 ? 'No decks yet. Import one to get started.' : 'No decks match your search.';
+      empty.style.display = matches.length ? 'none' : '';
+    };
+    renderList('');
+    search.addEventListener('input', () => renderList(search.value));
     const hint = element('p', 'library-hint', 'Tap to flip. Left to repeat. Right to memorize.\nSwipe down to return to your decks.');
     const notice = element('p', 'notice', pendingNotice);
     notice.setAttribute('role', 'status');
     pendingNotice = '';
-    screen.append(header, list, hint, notice, navBar('home'));
+    screen.append(header, search, list, empty, hint, notice, navBar('home'));
     setScreen(screen);
+    if (currentUser) void syncAllToCloud();
     let active = true;
     cleanup = () => { active = false; };
     picker.addEventListener('change', async () => {
@@ -237,16 +413,13 @@ async function library() {
       if (!file) return;
       importButton.disabled = true;
       list.querySelectorAll('button').forEach(tile => tile.disabled = true);
-      importButton.textContent = 'Importing…';
+      importButton.textContent = 'Reading…';
       screen.setAttribute('aria-busy', 'true');
       notice.textContent = 'Reading your deck…';
       try {
         const result = await importFile(file);
-        const saved = await saveImport(result);
         if (!active) return;
-        const count = result.decks.reduce((total, deck) => total + deck.cards.length, 0);
-        pendingNotice = saved ? `Imported ${count} cards in ${result.decks.length} deck${result.decks.length === 1 ? '' : 's'}.${result.warnings.length ? '\n' + result.warnings.join('\n') : ''}` : 'This package is already in your library.';
-        void library();
+        void importPreview(result);
       } catch (error) {
         if (!active) return;
         notice.textContent = error instanceof DOMException
@@ -267,8 +440,50 @@ async function library() {
   }
 }
 
+async function importPreview(result: ImportResult) {
+  const screen = element('section', 'panel');
+  const header = element('header', 'panel-header');
+  header.append(button('Cancel', 'back-button', () => void library()), element('h1', '', 'Import preview'));
+  const totalCards = result.decks.reduce((sum, deck) => sum + deck.cards.length, 0);
+  const hint = element('p', 'panel-hint', `${result.decks.length} deck${result.decks.length === 1 ? '' : 's'}, ${totalCards} card${totalCards === 1 ? '' : 's'} total.`);
+  const deckList = element('div', 'preview-deck-list');
+  for (const deck of result.decks) {
+    const row = element('div', 'preview-deck-row');
+    row.append(element('span', '', deck.name), element('span', 'deck-count', `${deck.cards.length} cards`));
+    deckList.append(row);
+  }
+  screen.append(header, hint, deckList);
+  if (result.warnings.length) {
+    const warnGroup = element('div', 'settings-group');
+    warnGroup.append(element('h2', 'settings-label', 'Compatibility notes'));
+    const warnList = element('ul', 'preview-warnings');
+    for (const warning of result.warnings) warnList.append(element('li', '', warning));
+    warnGroup.append(warnList);
+    screen.append(warnGroup);
+  }
+  const confirm = button(`Import ${totalCards} card${totalCards === 1 ? '' : 's'}`, 'primary-button', async () => {
+    confirm.disabled = true; confirm.textContent = 'Importing…';
+    try {
+      const saved = await saveImport(result);
+      pendingNotice = saved
+        ? `Imported ${totalCards} cards in ${result.decks.length} deck${result.decks.length === 1 ? '' : 's'}.`
+        : 'This package is already in your library.';
+    } catch (error) {
+      pendingNotice = error instanceof DOMException
+        ? (error.name === 'QuotaExceededError' ? 'There isn’t enough space for this deck. Free up some storage and try again.' : 'The deck could not be saved. Please reopen the app and try again.')
+        : error instanceof Error ? error.message : 'The deck could not be saved. Please try again.';
+    }
+    void library();
+  });
+  screen.append(confirm, button('Cancel', 'text-button', () => void library()));
+  setScreen(screen);
+}
+
 async function study(deck: Deck) {
-  const session = new StudySession(deck.cards);
+  // A fresh session locks in shuffle order immediately (persisted below) so
+  // resuming later never reshuffles; a resumed session reuses its saved order.
+  const orderedCards = deck.activeSession ? deck.cards : (deck.shuffle ? shuffle([...deck.cards]) : deck.cards);
+  const session = new StudySession(orderedCards, deck.activeSession);
   // A "Memorized" companion deck just studies normally; only a primary deck
   // relocates swiped-right cards into its companion.
   const isMemorizedDeck = !!deck.memorizedFor;
@@ -301,14 +516,21 @@ async function study(deck: Deck) {
   const instructions = element('p', 'sr-only', `Tap to flip. Swipe left to repeat, right to ${isMemorizedDeck ? 'remove' : 'memorize'}, or down to return to your decks. With a keyboard, use Enter to flip, arrow keys to sort, and Escape to leave.`);
   instructions.id = 'study-instructions';
   const accessibleActions = element('div', 'sr-only');
+  const toast = element('div', 'toast');
+  const toastMessage = element('span', 'toast-message');
+  const toastUndo = button('Undo', 'toast-undo', () => performUndo());
+  toast.append(toastMessage, toastUndo);
   accessibleActions.append(
     button('Keep card in loop', '', () => void swipe('left')),
     button(rightSwipeLabel, '', () => void swipe('right')),
+    button('Undo last swipe', '', () => performUndo()),
     button('Return to your decks', '', () => void leave()),
   );
-  screen.append(shell, instructions, accessibleActions);
+  screen.append(shell, instructions, accessibleActions, toast);
   setScreen(screen);
   let disposed = false, busy = false, flipped = false;
+  let pendingUndo: { card: Card; direction: 'left' | 'right'; movedToMemorized: boolean } | undefined;
+  let undoTimer: ReturnType<typeof setTimeout> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let media = new Map<string, string>();
   let sounds: { front: string[]; back: string[] } = { front: [], back: [] };
@@ -363,6 +585,39 @@ async function study(deck: Deck) {
     try { await saveReviewed(deck.id, session.reviewed); }
     catch { pendingNotice = 'Review progress could not be saved. Your cards are still in the library.'; }
   };
+  const persistSession = async () => {
+    try { await saveSessionState(deck.id, session.remaining ? session.snapshot : undefined); }
+    catch { /* resume state is best-effort */ }
+  };
+  function hideUndo() {
+    clearTimeout(undoTimer);
+    pendingUndo = undefined;
+    toast.classList.remove('visible');
+  }
+  function showUndo(card: Card, direction: 'left' | 'right', movedToMemorized: boolean) {
+    clearTimeout(undoTimer);
+    pendingUndo = { card, direction, movedToMemorized };
+    toastMessage.textContent = direction === 'left' ? 'Card requeued.' : movedToMemorized ? 'Card memorized.' : 'Card removed from this session.';
+    toast.classList.add('visible');
+    undoTimer = setTimeout(hideUndo, 4000);
+  }
+  function performUndo() {
+    if (!pendingUndo || disposed) return;
+    const { card: swipedCard, direction, movedToMemorized } = pendingUndo;
+    hideUndo();
+    session.undoLast(swipedCard, direction);
+    void persistSession();
+    void unmarkReviewed(deck.id, swipedCard.id).catch(() => {});
+    if (movedToMemorized) void moveBackFromMemorized(deck.id, swipedCard.id).catch(() => { pendingNotice = 'That card could not be restored. Please try again.'; });
+    busy = false;
+    card.classList.add('no-motion');
+    render();
+    shell.style.transition = 'none';
+    shell.style.transform = 'none';
+    shell.style.opacity = '1';
+    void card.offsetWidth;
+    card.classList.remove('no-motion');
+  }
   async function leave() {
     if (busy || disposed) return;
     busy = true;
@@ -372,6 +627,7 @@ async function study(deck: Deck) {
   async function swipe(direction: 'left' | 'right') {
     if (busy || disposed || !session.current) return;
     busy = true;
+    hideUndo();
     stopAudio();
     if (speechSupported) speechSynthesis.cancel();
     shell.style.transition = reduceMotion.matches ? 'none' : 'transform 180ms ease-out, opacity 180ms ease-out';
@@ -379,12 +635,14 @@ async function study(deck: Deck) {
     shell.style.opacity = '0';
     timer = setTimeout(() => {
       if (disposed) return;
-      const swiped = session.current;
+      const swiped = session.current!;
       session.swipe(direction);
-      void persist().then(() => {
-        if (direction === 'right' && !isMemorizedDeck && swiped) return moveToMemorized(deck.id, swiped.id);
-      }).catch(() => { pendingNotice = 'That card could not be moved to your Memorized deck. Please try again.'; });
+      void persist();
+      void persistSession();
+      const movedToMemorized = direction === 'right' && !isMemorizedDeck;
+      if (movedToMemorized) void moveToMemorized(deck.id, swiped.id).catch(() => { pendingNotice = 'That card could not be moved to your Memorized deck. Please try again.'; });
       if (!session.remaining) { void complete(); return; }
+      showUndo(swiped, direction, movedToMemorized);
       card.classList.add('no-motion');
       render();
       shell.style.transition = 'none';
@@ -446,6 +704,7 @@ async function study(deck: Deck) {
   const keydown = (event: KeyboardEvent) => {
     if (event.target instanceof HTMLButtonElement) return;
     if (['Enter', ' ', 'ArrowLeft', 'ArrowRight', 'Escape', 'ArrowDown'].includes(event.key)) event.preventDefault();
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); performUndo(); return; }
     if (event.repeat) return;
     if (event.key === 'Enter' || event.key === ' ') flip();
     else if (event.key === 'ArrowLeft') void swipe('left');
@@ -454,12 +713,13 @@ async function study(deck: Deck) {
   };
   window.addEventListener('keydown', keydown);
   cleanup = () => {
-    disposed = true; clearTimeout(timer); stopAudio();
+    disposed = true; clearTimeout(timer); clearTimeout(undoTimer); stopAudio();
     if (speechSupported) speechSynthesis.cancel();
     media.clear();
     window.removeEventListener('keydown', keydown);
   };
   render();
+  void persistSession();
   card.focus({ preventScroll: true });
   try {
     const files = await mediaForDeck(deck);
@@ -481,6 +741,10 @@ async function study(deck: Deck) {
 async function bootstrap() {
   currentSettings = await loadSettings();
   applyTheme(currentSettings.theme);
+  onAuthChange(user => { currentUser = user; });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') void syncAllToCloud();
+  });
   await library();
 }
 void bootstrap();

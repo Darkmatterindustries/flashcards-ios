@@ -35,6 +35,8 @@ The browser tests use a 440 × 956 viewport for the iPhone 16 Pro Max layout. Ac
 - A small speaker icon on the card speaks the German front text aloud via the Web Speech API (`de-DE`), which uses whichever system voice — including an Enhanced/Premium voice — the user has installed for German. It works for every deck, not just imported audio.
 - Long content scrolls vertically inside the card. Scroll to the top before swiping down to leave.
 - Keyboard equivalents and visually hidden assistive actions are available; reduced motion is respected.
+- A toast with an **Undo** button appears after each swipe (except the one that finishes a deck) for about 4 seconds, or until the next swipe. Undo puts the card back at the front of the queue, drops its reviewed mark, and pulls it back out of the Memorized deck if it had just been moved there. Cmd/Ctrl+Z does the same.
+- Leaving a deck mid-session (swipe down, or just closing the app) saves the exact remaining queue. Reopening that deck resumes it instead of restarting; finishing a deck, or "Study again" from the completion screen, always starts fresh.
 
 ## Home screen navigation
 
@@ -46,9 +48,22 @@ A bottom bar on the library screen only (not shown during study, to keep the car
 
 Reset and delete actions require a second tap within 3 seconds to confirm before anything changes.
 
+## Deck management
+
+- A search box above the deck list filters by name as you type.
+- Each deck tile has a shuffle icon (toggles that deck between original import order and random order for its next fresh session; remembered per deck) and a "⋯" menu (Rename, Delete, Cancel). Deleting a deck also removes its Memorized companion and any media no other deck still uses.
+
+## Cloud backup (optional)
+
+Sign in from **Settings → Account & backup** with an email and password to back up your decks and progress, and restore them after reinstalling (the 7-day Sideloadly re-signing cycle wipes local storage each time). Backed up: deck names, cards, reviewed/memorized status, and app settings. Not backed up: bundled images/audio from an `.apkg` import — those stay device-local, so re-import the original package after restoring a deck that had media.
+
+Sync happens automatically after every visit to the library screen, and when the app is backgrounded, whenever you're signed in; there's also a manual **Sync now** button. Signing in on a device that already has its own decks (not just the untouched starter deck) asks you to choose the cloud backup or this device's copy — there's no merge.
+
+This needs a Firebase project (Authentication with Email/Password, and Firestore) configured in `src/firebase-config.ts`. Without a config filled in, this section just shows "Cloud backup isn't set up yet" and the rest of the app is unaffected.
+
 ## APKG import
 
-Choose **Import deck** in the library, then select an `.apkg` file in Files. Import runs in a background worker, and decks/media are saved together in IndexedDB. Removing the app removes its local data.
+Choose **Import deck** in the library and select an `.apkg` file in Files. After parsing, an **Import preview** screen lists every deck name and card count in the package plus any compatibility notes (skipped templates, unsupported media, etc.) before anything is saved — Import to commit it, or Cancel to discard it. Import runs in a background worker, and decks/media are saved together in IndexedDB. Removing the app removes its local data.
 
 Supported package containers:
 

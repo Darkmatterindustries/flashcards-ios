@@ -1,5 +1,5 @@
 import { openDB, type DBSchema } from 'idb';
-import { starterDeck, defaultSettings, type AppSettings, type Deck, type ImportResult, type MediaFile } from './model';
+import { starterDeck, defaultSettings, type AppSettings, type Deck, type ImportResult, type MediaFile, type SessionSnapshot } from './model';
 
 interface LibraryDB extends DBSchema {
   decks: { key: string; value: Deck };
@@ -69,6 +69,88 @@ export async function moveToMemorized(sourceDeckId: string, cardId: string) {
 
 export async function mediaForDeck(deck: Deck) {
   return deck.packageId ? (await database).getAllFromIndex('media', 'package', deck.packageId) : [];
+}
+
+export async function getDeck(id: string) {
+  return (await database).get('decks', id);
+}
+
+/** Replaces the entire library with the given decks (used to restore a cloud backup). Media isn't part of a backup. */
+export async function replaceAllDecks(decks: Deck[]) {
+  const db = await database;
+  const tx = db.transaction(['decks', 'settings'], 'readwrite');
+  await tx.objectStore('decks').clear();
+  for (const deck of decks) await tx.objectStore('decks').put(deck);
+  await tx.objectStore('settings').put(true, 'seeded');
+  await tx.done;
+}
+
+/** Removes a card from a deck's Memorized companion and returns it to the source deck's own list. */
+export async function moveBackFromMemorized(sourceDeckId: string, cardId: string) {
+  const db = await database;
+  const tx = db.transaction('decks', 'readwrite');
+  const store = tx.objectStore('decks');
+  const companion = await store.get(`${sourceDeckId}::memorized`);
+  const index = companion?.cards.findIndex(card => card.id === cardId) ?? -1;
+  if (!companion || index === -1) { await tx.done; return; }
+  const [card] = companion.cards.splice(index, 1);
+  companion.reviewed = companion.reviewed.filter(id => id !== cardId);
+  const source = await store.get(sourceDeckId);
+  if (source) { source.cards.push(card); await store.put(source); }
+  await store.put(companion);
+  await tx.done;
+}
+
+export async function unmarkReviewed(deckId: string, cardId: string) {
+  const db = await database;
+  const tx = db.transaction('decks', 'readwrite');
+  const deck = await tx.store.get(deckId);
+  if (deck) { deck.reviewed = deck.reviewed.filter(id => id !== cardId); await tx.store.put(deck); }
+  await tx.done;
+}
+
+/** Persists the in-progress queue so leaving and reopening this deck resumes it; pass undefined to clear it. */
+export async function saveSessionState(deckId: string, snapshot: SessionSnapshot | undefined) {
+  const db = await database;
+  const tx = db.transaction('decks', 'readwrite');
+  const deck = await tx.store.get(deckId);
+  if (deck) { deck.activeSession = snapshot; await tx.store.put(deck); }
+  await tx.done;
+}
+
+export async function setDeckShuffle(deckId: string, shuffle: boolean) {
+  const db = await database;
+  const tx = db.transaction('decks', 'readwrite');
+  const deck = await tx.store.get(deckId);
+  if (deck) { deck.shuffle = shuffle; await tx.store.put(deck); }
+  await tx.done;
+}
+
+export async function renameDeck(deckId: string, name: string) {
+  const db = await database;
+  const tx = db.transaction('decks', 'readwrite');
+  const deck = await tx.store.get(deckId);
+  if (deck) { deck.name = name; await tx.store.put(deck); }
+  await tx.done;
+}
+
+/** Deletes a deck, its Memorized companion (if any), and any media no other deck still references. */
+export async function deleteDeck(deckId: string) {
+  const db = await database;
+  const tx = db.transaction(['decks', 'media'], 'readwrite');
+  const decks = tx.objectStore('decks');
+  const deck = await decks.get(deckId);
+  await decks.delete(deckId);
+  await decks.delete(`${deckId}::memorized`);
+  if (deck?.packageId) {
+    const stillUsed = (await decks.getAll()).some(other => other.packageId === deck.packageId);
+    if (!stillUsed) {
+      const media = tx.objectStore('media');
+      let cursor = await media.index('package').openCursor(deck.packageId);
+      while (cursor) { await cursor.delete(); cursor = await cursor.continue(); }
+    }
+  }
+  await tx.done;
 }
 
 export async function loadSettings(): Promise<AppSettings> {
