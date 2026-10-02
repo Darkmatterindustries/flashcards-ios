@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 vi.mock('../src/pronunciation-recordings.json', () => ({ default: {
   'der Entwurf': { file: `${'a'.repeat(64)}.mp3`, voiceId: 'test', model: 'test' },
 } }));
-import { normalizeSpeech, preferredGermanVoice, pronounce, stopPronunciation } from '../src/pronunciation';
+import { normalizeSpeech, preferredGermanVoice, pronounce, stopPronunciation, pronunciationSource } from '../src/pronunciation';
 import { defaultSettings } from '../src/model';
 
 afterEach(() => { stopPronunciation(); vi.unstubAllGlobals(); });
@@ -33,12 +33,17 @@ it('plays saved audio, falls back once on error, and ignores failures after navi
     pause() {} removeAttribute() {} load() {}
   }
   vi.stubGlobal('Audio', FakeAudio);
-  pronounce('der Entwurf', defaultSettings);
+  const source = vi.fn();
+  expect(pronunciationSource('der Entwurf', defaultSettings)).toBe('Saved audio · ElevenLabs');
+  expect(pronunciationSource('der Entwurf', { ...defaultSettings, preferRecordedAudio: false })).toBe('Device voice');
+  pronounce('der Entwurf', defaultSettings, source);
+  expect(source).toHaveBeenLastCalledWith('Saved audio · ElevenLabs');
   expect(players[0].src).toContain('/pronunciation/');
   expect(speak).not.toHaveBeenCalled();
   players[0].onerror?.(); players[0].reject(new Error('missing file'));
   await Promise.resolve();
   expect(speak).toHaveBeenCalledTimes(1);
+  expect(source).toHaveBeenLastCalledWith('Device voice');
   pronounce('der Entwurf', defaultSettings);
   stopPronunciation();
   players[1].reject(new Error('cancelled'));

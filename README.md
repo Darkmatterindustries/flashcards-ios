@@ -1,6 +1,23 @@
 # Flashcards
 
-iPhone flashcard MVP based on `Flashcard_App_UX_UI.pdf`, with import-only deck management and three built-in German vocabulary cards. The UI is TypeScript/CSS, packaged as an iOS app with Capacitor and a local WKWebView. There is no account, server, analytics or runtime CDN dependency.
+iPhone flashcard MVP based on `docs/Flashcard_App_UX_UI.pdf`, with import-only deck management and three built-in German vocabulary cards. The UI is TypeScript/CSS, packaged as an iOS app with Capacitor and a local WKWebView. There is no account, server, analytics or runtime CDN dependency.
+
+## Project layout
+
+| Folder | Contents |
+| --- | --- |
+| `src/` | App code (TypeScript/CSS), grammar lessons and the pronunciation index |
+| `public/pronunciation/` | Bundled Azure Katja voice clips for words and example sentences |
+| `tests/`, `e2e/` | Vitest unit tests and Playwright end-to-end tests |
+| `scripts/audio/` | Azure / ElevenLabs voice generation and audio summaries |
+| `scripts/grammar/` | Grammar lesson drafting, validation and coverage checks |
+| `scripts/decks/` | Builders for the curated Goethe C1 Anki decks |
+| `scripts/packaging/` | iOS IPA, Android and Windows packaging, PlayCover signing |
+| `grammar-workspace/` | Batch inputs/outputs used to draft the grammar lessons |
+| `ios/`, `android/`, `windows/` | Native platform shells |
+| `docs/` | Design spec, previews, release notes and test fixtures |
+
+API keys live in git-ignored `.env.*` files and are never committed.
 
 ## Run and check
 

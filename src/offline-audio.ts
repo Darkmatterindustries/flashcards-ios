@@ -6,6 +6,7 @@ const catalog: Record<string, { file: string }> = recordings;
 let database: ReturnType<typeof openDB> | undefined;
 const db = () => database ??= openDB('flashcards-audio', 1, { upgrade(database) { database.createObjectStore('clips'); } });
 const urls = new Map<string, string>();
+let warmGeneration = 0;
 export function recordingFile(text: string) {
   const key = text.normalize('NFC').replace(/\s+/g, ' ').trim();
   return Object.hasOwn(catalog, key) ? catalog[key].file : undefined;
@@ -15,11 +16,13 @@ export function deckFiles(cards: Card[]) {
 }
 export function cachedAudioUrl(file: string) { return urls.get(file); }
 export async function warmAudio(cards: Card[]) {
+  const generation = ++warmGeneration;
   for (const url of urls.values()) URL.revokeObjectURL(url);
   urls.clear();
   const store = await db();
   for (const file of deckFiles(cards)) {
     const blob = await store.get('clips', file) as Blob | undefined;
+    if (generation !== warmGeneration) return;
     if (blob) urls.set(file, URL.createObjectURL(blob));
   }
 }

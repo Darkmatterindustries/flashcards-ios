@@ -5,11 +5,32 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore, doc, setDoc, deleteDoc, getDoc, collection, getDocs, writeBatch,
-  getDocsFromServer, getDocFromServer,
+  getDocsFromServer, getDocFromServer, runTransaction,
   type Firestore, type DocumentReference, type WriteBatch,
 } from 'firebase/firestore';
 import { firebaseConfig, isFirebaseConfigured } from './firebase-config';
 import type { AppSettings, Card, Deck } from './model';
+import { mergeUsage, type UsageDevice } from './usage-core';
+
+export async function syncUsageDevice(uid: string, deviceId: string, device: UsageDevice): Promise<Record<string, UsageDevice>> {
+  const firebaseApp = ensureApp();
+  if (!firebaseApp) throw new Error('Cloud backup is not configured.');
+  const db = getFirestore(firebaseApp);
+  const reference = doc(db, 'users', uid, 'meta', `usage-${deviceId}`);
+  await runTransaction(db, async tx => {
+    const existing = await tx.get(reference);
+    tx.set(reference, { platform: device.platform, days: mergeUsage(existing.data()?.days || {}, device.days) });
+  });
+  const snapshot = await getDocsFromServer(collection(db, 'users', uid, 'meta'));
+  const devices: Record<string, UsageDevice> = {};
+  for (const entry of snapshot.docs) {
+    if (!entry.id.startsWith('usage-')) continue;
+    const value = entry.data();
+    if (!['iOS', 'Android', 'Windows', 'Web'].includes(value.platform)) continue;
+    devices[entry.id.slice(6)] = { platform: value.platform, days: mergeUsage({}, value.days || {}) };
+  }
+  return devices;
+}
 
 export type { User };
 
@@ -56,7 +77,8 @@ export async function signOutUser() {
 // per-document limit and fail to sync without any visible error.
 export type CloudDeck = Omit<Deck, 'packageId' | 'cards'>;
 export type RestoredDeck = CloudDeck & { cards: Card[] };
-const toCloudDeck = ({ packageId: _packageId, cards: _cards, ...rest }: Deck): CloudDeck => rest;
+const toCloudDeck = ({ packageId: _packageId, cards: _cards, ...rest }: Deck): CloudDeck => JSON.parse(JSON.stringify(rest));
+const canonical = (value: unknown): string => JSON.stringify(value, (_key, entry) => entry && typeof entry === 'object' && !Array.isArray(entry) ? Object.fromEntries(Object.entries(entry).sort(([a], [b]) => a.localeCompare(b))) : entry);
 
 const BATCH_LIMIT = 450; // stay comfortably under Firestore's 500-write cap per batch
 
@@ -81,18 +103,26 @@ export async function pushDeck(uid: string, deck: Deck) {
   if (!firebaseApp) return;
   const db = getFirestore(firebaseApp);
   const deckRef = doc(db, 'users', uid, 'decks', deck.id);
-  const operations: Array<(batch: WriteBatch) => void> = [batch => batch.set(deckRef, toCloudDeck(deck))];
-  for (const card of deck.cards) {
+  const [oldDeck, oldCards] = await Promise.all([getDoc(deckRef), getDocs(collection(deckRef, 'cards'))]);
+  const existing = new Map(oldCards.docs.map(card => [card.id, card]));
+  const metadata = toCloudDeck(deck);
+  const operations: Array<(batch: WriteBatch) => void> = [];
+  if (!oldDeck.exists() || canonical(oldDeck.data()) !== canonical(metadata)) operations.push(batch => batch.set(deckRef, metadata));
+  for (const [position, card] of deck.cards.entries()) {
     const cardRef = doc(deckRef, 'cards', card.id);
     // Firestore rejects undefined field values, so only include what's actually set.
     const { front, back, example, tags, difficult, schedule } = card;
-    const data: Record<string, unknown> = { front, back };
+    const data: Record<string, unknown> = { front, back, position };
     if (example !== undefined) data.example = example;
     if (tags !== undefined) data.tags = tags;
     if (difficult !== undefined) data.difficult = difficult;
     if (schedule !== undefined) data.schedule = schedule;
-    operations.push(batch => batch.set(cardRef, data));
+    const previous = existing.get(card.id);
+    if (!previous || canonical(previous.data()) !== canonical(data)) operations.push(batch => batch.set(cardRef, data));
+    existing.delete(card.id);
   }
+  // A card moved to Memorized must not reappear in its old deck on restore.
+  for (const old of existing.values()) operations.push(batch => batch.delete(old.ref));
   await commitInChunks(db, operations);
 }
 
@@ -137,8 +167,8 @@ export async function cloudStorageUsage(uid: string) {
     const savedCards = await getDocsFromServer(collection(deck.ref, 'cards'));
     for (const card of savedCards.docs) { bytes += size(card.data()); cards++; }
   }
-  const settings = await getDocFromServer(doc(db, 'users', uid, 'meta', 'settings'));
-  if (settings.exists()) bytes += size(settings.data());
+  const metadata = await getDocsFromServer(collection(db, 'users', uid, 'meta'));
+  for (const entry of metadata.docs) bytes += size(entry.data());
   return { bytes, decks: decks.size, cards, checkedAt: Date.now() };
 }
 
@@ -149,7 +179,10 @@ export async function pullAll(uid: string): Promise<{ decks: RestoredDeck[]; set
   const snapshot = await getDocs(collection(db, 'users', uid, 'decks'));
   const decks = await Promise.all(snapshot.docs.map(async deckDoc => {
     const cardsSnapshot = await getDocs(collection(deckDoc.ref, 'cards'));
-    const cards = cardsSnapshot.docs.map(cardDoc => ({ id: cardDoc.id, ...(cardDoc.data() as Omit<Card, 'id'>) }));
+    const cards = [...cardsSnapshot.docs].sort((a, b) => (a.data().position ?? 0) - (b.data().position ?? 0)).map(cardDoc => {
+      const { position: _position, ...data } = cardDoc.data();
+      return { ...data, id: cardDoc.id } as Card;
+    });
     return { ...(deckDoc.data() as CloudDeck), cards };
   }));
   const settingsSnap = await getDoc(doc(db, 'users', uid, 'meta', 'settings'));

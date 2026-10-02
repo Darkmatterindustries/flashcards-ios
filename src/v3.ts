@@ -1,9 +1,10 @@
 import type { Card, Deck, AppSettings } from './model';
-import { loadDecks, loadSettings, saveSettings, editCard, rateCard, recordActivity } from './storage';
+import { loadDecks, loadSettings, editCard, rateCard, recordActivity, mediaForDeck } from './storage';
 import { studyTotals, localDay, nextSchedule, type Rating } from './review';
 import { plainText } from './speech-text';
+import { grammarPanel } from './grammar';
 import { cardContent } from './content';
-import { pronounce, stopPronunciation } from './pronunciation';
+import { pronounce, stopPronunciation, pronunciationSource } from './pronunciation';
 import { audioCoverage, downloadDeckAudio, warmAudio } from './offline-audio';
 
 type Host = { show: (screen: HTMLElement, dispose?: () => void) => void; back: () => void; quick: (deck: Deck) => void; settingsChanged: (settings: AppSettings) => Promise<void>; changed: () => void };
@@ -112,12 +113,16 @@ async function practice(host: Host, decks: Deck[], mode: Mode) {
   const title = { scheduled: 'Scheduled review', difficult: 'Difficult words', reverse: 'English → German', listening: 'Listening practice' }[mode];
   const screen = panel(title, () => void studyHub(host));
   const status = el('p', 'panel-hint');
-  const face = el('button', 'practice-card'); face.type = 'button'; face.setAttribute('aria-label', 'Reveal answer');
+  const face = el('button', 'practice-card'); face.type = 'button'; face.setAttribute('aria-label', 'Study card, tap to reveal');
   const reveal = action('Reveal answer', () => { revealed = true; render(); }, 'primary-button');
-  const hear = action('Hear German', () => { if (entries[index]) pronounce(plainText(entries[index].card.front), settings); });
+  const sourceLabel = el('p', 'settings-about');
+  sourceLabel.setAttribute('aria-live', 'polite');
+  const hear = action('Hear German', () => { if (entries[index]) pronounce(plainText(entries[index].card.front), settings, source => { sourceLabel.textContent = source; }); });
   const ratings = el('div', 'rating-grid');
   const error = el('p', 'notice'); error.setAttribute('role', 'status');
   let index = 0, revealed = false, busy = false, disposed = false;
+  const media = new Map<string, Map<string, string>>();
+  const mediaUrls: string[] = [];
   const advance = async (rating?: Rating) => {
     if (busy || !entries[index]) return;
     busy = true; screen.querySelectorAll('button').forEach(b => { b.disabled = true; });
@@ -135,19 +140,22 @@ async function practice(host: Host, decks: Deck[], mode: Mode) {
     const entry = entries[index]; ratings.replaceChildren();
     if (!entry) {
       status.textContent = entries.length ? `Completed ${entries.length} reviews. “Again” cards return after one minute.` : 'No matching cards right now. New and due cards exclude Memorized decks; mark difficult cards in the editor.';
-      face.hidden = true; reveal.hidden = true; hear.hidden = true;
+      face.hidden = true; reveal.hidden = true; hear.hidden = true; sourceLabel.hidden = true;
       ratings.append(action('Back to study hub', () => void studyHub(host), 'primary-button')); return;
     }
     status.textContent = `${index + 1} / ${entries.length} · ${entry.deck.name}`;
     const question = mode === 'reverse' ? entry.card.back : entry.card.front;
+    sourceLabel.textContent = pronunciationSource(plainText(entry.card.front), settings);
     const answer = mode === 'reverse' ? entry.card.front : entry.card.back;
     face.replaceChildren();
     if (!revealed && mode === 'listening') face.append(el('p', '', 'Listen, then reveal'));
     else {
-      const content = el('div'); content.innerHTML = cardContent(revealed ? answer : question, new Map()).html; face.append(content);
+      const content = el('div'); content.innerHTML = cardContent(revealed ? answer : question, media.get(entry.deck.id) ?? new Map()).html; face.append(content);
       if (revealed) {
         face.append(el('p', 'practice-question', plainText(question)));
         if (entry.card.example) face.append(el('p', 'practice-example', entry.card.example));
+        const grammar = grammarPanel(entry.card.front);
+        if (grammar) face.append(grammar);
         if (entry.card.tags?.length) face.append(el('p', 'settings-about', entry.card.tags.join(' · ')));
       }
     }
@@ -158,9 +166,19 @@ async function practice(host: Host, decks: Deck[], mode: Mode) {
     }
     else if (revealed) ratings.append(action('Next card', () => void advance(), 'primary-button'));
   }
-  screen.append(status, face, hear, reveal, ratings, error, el('p', 'settings-about', 'This mode keeps cards in their decks. Use Home for left-to-repeat / right-to-Memorized swipe review.'));
-  await warmAudio(entries.map(e => e.card)).catch(() => {});
-  host.show(screen, () => { disposed = true; stopPronunciation(); }); render();
+  screen.append(status, face, hear, sourceLabel, reveal, ratings, error, el('p', 'settings-about', 'This mode keeps cards in their decks. Use Home for left-to-repeat / right-to-Memorized swipe review.'));
+  host.show(screen, () => { disposed = true; stopPronunciation(); mediaUrls.forEach(url => URL.revokeObjectURL(url)); }); render();
+  void warmAudio(entries.map(e => e.card)).catch(() => {});
+  void (async () => {
+    for (const deck of decks) {
+      const files = await mediaForDeck(deck);
+      if (disposed) return;
+      media.set(deck.id, new Map(files.map(file => {
+        const url = URL.createObjectURL(new Blob([file.data], { type: file.mime })); mediaUrls.push(url); return [file.name, url];
+      })));
+    }
+    if (!disposed && !busy) render();
+  })().catch(() => {});
 }
 
 async function browseCards(host: Host, chosen: Deck[]) {

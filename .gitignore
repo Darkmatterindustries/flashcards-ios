@@ -12,3 +12,9 @@ build/
 artifacts/
 flashcarddecks/
 .claude/worktrees/
+*.jks
+*.keystore
+
+# Local logs and scratch files
+*.log
+.scratch/

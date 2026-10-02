@@ -46,19 +46,20 @@ vi.mock('firebase/firestore', () => {
 });
 
 const { pushDeck, pushSettings, pullAll, cloudStorageUsage } = await import('../src/cloud');
-const { setDoc, getDoc, getDocsFromServer, getDocFromServer } = await import('firebase/firestore');
+const { setDoc, getDoc, getDocs, getDocsFromServer, getDocFromServer } = await import('firebase/firestore');
 
 it('measures saved server content and does not report zero on connection failure', async () => {
   const deck = { name: 'Cloud deck' };
   const card = { front: 'über', back: 'over' };
   const settings = { theme: 'paper' };
+  const appTime = { platform: 'Windows', days: { '2026-09-14': 60000 } };
   vi.mocked(getDocsFromServer).mockResolvedValueOnce({ size: 1, docs: [{ ref: 'deck-ref', data: () => deck }] } as never);
   vi.mocked(getDocsFromServer).mockResolvedValueOnce({ size: 1, docs: [{ data: () => card }] } as never);
-  vi.mocked(getDocFromServer).mockResolvedValueOnce({ exists: () => true, data: () => settings } as never);
+  vi.mocked(getDocsFromServer).mockResolvedValueOnce({ docs: [{ data: () => settings }, { data: () => appTime }] } as never);
   const usage = await cloudStorageUsage('uid');
   expect(usage.cards).toBe(1);
   expect(usage.decks).toBe(1);
-  expect(usage.bytes).toBe([deck, card, settings].reduce((sum, item) => sum + new TextEncoder().encode(JSON.stringify(item)).byteLength, 0));
+  expect(usage.bytes).toBe([deck, card, settings, appTime].reduce((sum, item) => sum + new TextEncoder().encode(JSON.stringify(item)).byteLength, 0));
   vi.mocked(getDocsFromServer).mockRejectedValueOnce(new Error('offline'));
   await expect(cloudStorageUsage('uid')).rejects.toThrow('offline');
 });
@@ -78,6 +79,19 @@ function makeDeck(cardCount: number) {
 
 describe('cloud sync write chunking', () => {
   beforeEach(() => { commits.length = 0; setCalls.length = 0; });
+
+  it('does not rewrite unchanged cards and removes cards moved out of a deck', async () => {
+    const deck = makeDeck(1);
+    const { cards: _cards, ...metadata } = deck;
+    vi.mocked(getDoc).mockResolvedValueOnce({ exists: () => true, data: () => metadata } as never);
+    vi.mocked(getDocs).mockResolvedValueOnce({ docs: [
+      { id: 'card-0', ref: 'existing', data: () => ({ front: 'x', back: 'y', position: 0 }) },
+      { id: 'moved', ref: 'old-card', data: () => ({ front: 'old', back: 'card' }) },
+    ] } as never);
+    await pushDeck('uid', deck);
+    expect(setCalls).toHaveLength(0);
+    expect(commits).toEqual([{ sets: 0, deletes: 1 }]);
+  });
 
   it('splits a large deck across multiple batches to respect the 500-write cap', async () => {
     // 1000 cards + 1 metadata write = 1001 operations, chunked at 450 per batch.
@@ -104,11 +118,11 @@ describe('cloud sync write chunking', () => {
     ];
     await pushDeck('uid', deck);
     const plain = setCalls.find(call => call.path.endsWith('cards/plain'))!.data;
-    expect(plain).toEqual({ front: 'a', back: 'b' });
+    expect(plain).toEqual({ front: 'a', back: 'b', position: 0 });
     expect(Object.values(plain).every(value => value !== undefined)).toBe(true);
     const edited = setCalls.find(call => call.path.endsWith('cards/edited'))!.data;
     expect(edited).toEqual({
-      front: 'c', back: 'd', tags: ['noun'], difficult: true, example: 'ex sentence',
+      front: 'c', back: 'd', position: 1, tags: ['noun'], difficult: true, example: 'ex sentence',
       schedule: { due: 1000, intervalDays: 4, reviews: 2, lapses: 0, lastReviewed: 500 },
     });
   });

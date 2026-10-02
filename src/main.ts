@@ -1,26 +1,43 @@
 import './style.css';
+import { Capacitor } from '@capacitor/core';
 import {
   loadDecks, saveImport, saveReviewed, mediaForDeck, moveToMemorized, moveBackFromMemorized, unmarkReviewed,
   saveSessionState, setDeckShuffle, renameDeck, deleteDeck, loadSettings, saveSettings, resetProgress, wipeAllDecks,
-  replaceAllDecks, storageSummary, loadBackupStatus, saveBackupStatus, getLastModified,
+  replaceAllDecks, storageSummary, loadBackupStatus, saveBackupStatus, getLastModified, recordActivity,
 } from './storage';
 import { defaultSettings, type AppSettings, type BackgroundPreference, type Card, type Deck, type ImportResult, type ThemePreference } from './model';
 import { StudySession } from './session';
 import { cardContent } from './content';
 import { importFile } from './import/client';
-import { pronounce, stopPronunciation, recordingCount } from './pronunciation';
+import { pronounce, stopPronunciation, recordingCount, pronunciationSource } from './pronunciation';
 import { plainText } from './speech-text';
+import { grammarPanel } from './grammar';
 import { ambientScene } from './ambient';
 import { exportDeckToApkg, apkgFileName } from './export';
+import { shareDeckFile } from './share-deck';
+import { startUsageTracking, setUsageUser, syncUsage, usagePanel } from './usage';
 import { dailyDashboard, studyHub } from './v3';
+import { warmAudio } from './offline-audio';
 import generatedAudioSummary from './generated-audio-summary.json';
 import {
   cloudAvailable, onAuthChange, signUp, signIn, signOutUser, pushAllDecks, pushSettings,
   removeDeckFromCloud, clearAllCloudDecks, pullAll, cloudStorageUsage, type User,
 } from './cloud';
 
-const APP_VERSION = '1.0 (1)';
+const APP_VERSION = '3.0';
 const app = document.querySelector<HTMLElement>('#app')!;
+if (Capacitor.getPlatform() === 'android') {
+  void import('@capacitor/app').then(({ App }) => App.addListener('backButton', () => {
+    const sheet = document.querySelector<HTMLElement>('.sheet-backdrop');
+    if (sheet) sheet.click();
+    else if (document.querySelector('.study')) window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    else {
+      const back = app.querySelector<HTMLButtonElement>('.back-button');
+      if (back) back.click();
+      else void App.minimizeApp();
+    }
+  }));
+}
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let cleanup = () => {};
 let pendingNotice = '';
@@ -29,6 +46,7 @@ let currentUser: User | null = null;
 let preferenceStatus = '';
 let cloudUsageCache: { uid: string; usage: Awaited<ReturnType<typeof cloudStorageUsage>> } | undefined;
 let preferenceQueue: Promise<void> = Promise.resolve();
+let backupInFlight: Promise<string> | undefined;
 function reportPreferences(message: string) {
   preferenceStatus = message;
   document.querySelectorAll('.preference-sync-status').forEach(el => { el.textContent = message; });
@@ -49,9 +67,13 @@ function persistPreferences() {
   return preferenceQueue;
 }
 
-async function syncAllToCloud() {
+function syncAllToCloud(): Promise<string> {
+  return backupInFlight ??= performCloudBackup().finally(() => { backupInFlight = undefined; });
+}
+async function performCloudBackup() {
   if (!currentUser) return 'Sign in to back up your data.';
   const user = currentUser;
+  const syncedThrough = await getLastModified();
   await saveBackupStatus({ ...(await loadBackupStatus()), lastAttemptAt: Date.now() });
   try {
     await user.getIdToken();
@@ -59,8 +81,9 @@ async function syncAllToCloud() {
     await pushAllDecks(user.uid, decks);
     await preferenceQueue;
     await pushSettings(user.uid, currentSettings);
+    await syncUsage();
     const now = Date.now();
-    await saveBackupStatus({ lastSuccessAt: now, lastAttemptAt: now, lastError: undefined });
+    await saveBackupStatus({ lastSuccessAt: now, lastAttemptAt: now, lastError: undefined, syncedThrough, userId: user.uid });
     return `Backup completed at ${new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Decks, progress and settings were uploaded.`;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Backup failed';
@@ -123,6 +146,7 @@ function openDeckMenu(deck: Deck, onChanged: () => void) {
   function showMenu() {
     sheet.replaceChildren(
       element('p', 'sheet-title', deck.name),
+      button('Study modes & card editor', 'sheet-action', () => { close(); openStudyHub(deck.id); }),
       button('Rename', 'sheet-action', showRenameForm),
       button('Export deck', 'sheet-action', showExportConfirm),
       button('Delete deck', 'sheet-action danger', showDeleteConfirm),
@@ -136,12 +160,9 @@ function openDeckMenu(deck: Deck, onChanged: () => void) {
       try {
         const blob = await exportDeckToApkg(deck);
         const file = new File([blob], apkgFileName(deck.name), { type: 'application/octet-stream' });
-        if (navigator.canShare?.({ files: [file] })) {
-          await navigator.share({ files: [file], title: deck.name });
-          close();
-          return;
-        }
-        status.textContent = 'Sharing files isn’t available in this browser preview, but it works on your iPhone.';
+        await shareDeckFile(file, deck.name);
+        close();
+        return;
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') { close(); return; }
         status.textContent = 'This deck could not be exported. Please try again.';
@@ -295,6 +316,22 @@ async function settingsScreen() {
     voiceGroup.append(element('p', 'settings-about', 'Pronunciation isn’t supported in this browser preview, but it works on your iPhone.'));
   }
 
+  voiceGroup.append(element('h3', 'settings-label', 'Azure voice samples'));
+  voiceGroup.append(element('p', 'settings-about', 'Compare Katja and Conrad saying “der Entwurf”. These samples use Azure; the dropdown above selects your device voice.'));
+  for (const [name, file] of [
+    ['Katja', '7e0ec90b564c079382fd7bdde5a3c042c2d4b5f85cd3c1553a4c1dea44d67daf.mp3'],
+    ['Conrad', 'd18997e45b91b7f8f13573520c9fe66a98a7cd399e64acec614bb7d814f72f90.mp3'],
+  ]) {
+    const sample = document.createElement('audio');
+    sample.controls = true; sample.preload = 'none'; sample.style.width = '100%';
+    sample.src = `${import.meta.env.BASE_URL}voice-samples/${file}`;
+    sample.setAttribute('aria-label', `${name} Azure voice sample`);
+    voiceGroup.append(element('p', 'settings-about', name), sample);
+  }
+  const samplesLink = element('a', 'text-button', 'All Azure samples');
+  samplesLink.href = `${import.meta.env.BASE_URL}voice-samples/index.html`;
+  voiceGroup.append(samplesLink);
+
   const themeGroup = element('div', 'settings-group');
   themeGroup.append(element('h2', 'settings-label', 'Appearance'));
   const themeRow = element('div', 'theme-grid');
@@ -431,7 +468,7 @@ async function settingsScreen() {
 
   const accountGroup = element('div', 'settings-group');
   accountGroup.append(element('h2', 'settings-label', 'Account & backup'));
-  accountGroup.append(element('p', 'settings-about', 'Backed up: decks, card text, progress, study sessions and preferences—including theme, background, intensity, animation and voice settings.\nNot backed up: imported images/audio or generated pronunciation files. Generated audio comes with the app build; Live loads it from the computer.\nThis is backup and restore, not live merging between devices. Cloud storage and service quota usage are not available in this app.'));
+  accountGroup.append(element('p', 'settings-about', 'Backed up: daily app time, decks, card text, progress, study sessions and preferences—including theme, background, intensity, animation and voice settings.\nNot backed up: imported images/audio or generated pronunciation files. Generated audio comes with the app build; Live loads it from the computer.\nThis is backup and restore, not live merging between devices. Cloud storage and service quota usage are not available in this app.'));
   const preferenceNotice = element('p', 'settings-about preference-sync-status', preferenceStatus);
   preferenceNotice.setAttribute('aria-live', 'polite');
   accountGroup.append(preferenceNotice);
@@ -481,12 +518,13 @@ async function settingsScreen() {
       return sameDay ? `today at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : date.toLocaleDateString([], { month: 'short', day: 'numeric' });
     };
     async function refreshBackupStatusLine() {
-      const [backupStatus, lastModified] = await Promise.all([loadBackupStatus(), getLastModified()]);
+      const [savedStatus, lastModified] = await Promise.all([loadBackupStatus(), getLastModified()]);
+      const backupStatus = savedStatus.userId && savedStatus.userId !== currentUser?.uid ? {} : savedStatus;
       const lines = [`Signed in as ${currentUser?.email ?? ''}`];
       if (backupStatus.lastError) lines.push(`Backup failed: ${backupStatus.lastError}`);
       else if (backupStatus.lastSuccessAt) lines.push(`Last backed up ${formatWhen(backupStatus.lastSuccessAt)}.`);
       else lines.push('Never backed up yet.');
-      if (lastModified > (backupStatus.lastSuccessAt ?? 0)) lines.push('Changes pending sync.');
+      if (lastModified > (backupStatus.syncedThrough ?? backupStatus.lastSuccessAt ?? 0)) lines.push('Changes pending sync.');
       status.textContent = lines.join('\n');
     }
     void refreshBackupStatusLine();
@@ -536,7 +574,7 @@ async function settingsScreen() {
   const aboutGroup = element('div', 'settings-group');
   aboutGroup.append(element('h2', 'settings-label', 'About'), element('p', 'settings-about', `Flashcards — version ${APP_VERSION}\nImport-only vocabulary study, built for iPhone.`));
 
-  screen.append(voiceGroup, themeGroup, dataGroup, accountGroup, aboutGroup);
+  screen.append(usagePanel(), voiceGroup, themeGroup, dataGroup, accountGroup, aboutGroup);
   setScreen(screen);
   if (speechSupported) cleanup = () => speechSynthesis.removeEventListener('voiceschanged', populateVoices);
 }
@@ -753,6 +791,7 @@ async function importPreview(result: ImportResult) {
 }
 
 async function study(deck: Deck) {
+  await warmAudio(deck.cards).catch(() => {});
   // A fresh session locks in shuffle order immediately (persisted below) so
   // resuming later never reshuffles; a resumed session reuses its saved order.
   const orderedCards = deck.activeSession ? deck.cards : (deck.shuffle ? shuffle([...deck.cards]) : deck.cards);
@@ -784,11 +823,13 @@ async function study(deck: Deck) {
     speakButton.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M3 10v4h4l5 5V5L7 10H3z"/><path d="M16.3 12c0-1.5-.8-2.8-2-3.4v6.8c1.2-.6 2-1.9 2-3.4z"/><path d="M14.3 4.6v2.1c2.3.8 4 3 4 5.3s-1.7 4.5-4 5.3v2.1c3.4-.9 6-4 6-7.4s-2.6-6.5-6-7.4z"/></svg>';
   }
   shell.append(card, count);
+  const sourceLabel = element('p', 'settings-about pronunciation-source');
+  sourceLabel.setAttribute('aria-live', 'polite');
   if (speakButton) shell.append(speakButton);
   const rightSwipeLabel = isMemorizedDeck ? 'Remove card from this session' : 'Move card to Memorized deck';
   const instructions = element('p', 'sr-only', `Tap to flip. Swipe left to repeat, right to ${isMemorizedDeck ? 'remove' : 'memorize'}, or down to return to your decks. With a keyboard, use Enter to flip, arrow keys to sort, and Escape to leave.`);
   instructions.id = 'study-instructions';
-  const accessibleActions = element('div', 'sr-only');
+  const accessibleActions = element('div', 'sr-only study-actions');
   const toast = element('div', 'toast');
   const toastMessage = element('span', 'toast-message');
   const toastUndo = button('Undo', 'toast-undo', () => performUndo());
@@ -799,7 +840,7 @@ async function study(deck: Deck) {
     button('Undo last swipe', '', () => performUndo()),
     button('Return to your decks', '', () => void leave()),
   );
-  screen.append(shell, instructions, accessibleActions, toast);
+  screen.append(shell, sourceLabel, instructions, accessibleActions, toast);
   setScreen(screen);
   let disposed = false, busy = false, flipped = false;
   let pendingUndo: { card: Card; direction: 'left' | 'right'; movedToMemorized: boolean } | undefined;
@@ -826,7 +867,7 @@ async function study(deck: Deck) {
     event.stopPropagation();
     if (busy || disposed || !session.current) return;
     stopAudio();
-    speak(plainText(session.current.front));
+    pronounce(plainText(session.current.front), currentSettings, source => { sourceLabel.textContent = source; });
   });
   const refreshAccessibility = () => {
     front.setAttribute('aria-hidden', String(flipped));
@@ -835,10 +876,18 @@ async function study(deck: Deck) {
   };
   const render = (reset = true) => {
     if (!session.current) return;
+    sourceLabel.textContent = pronunciationSource(plainText(session.current.front), currentSettings);
     if (reset) { flipped = false; card.classList.remove('flipped'); }
     const a = cardContent(session.current.front, media), b = cardContent(session.current.back, media);
     frontContent.innerHTML = `<div class="card-body">${a.html}</div>`;
     backContent.innerHTML = `<div class="card-body">${b.html}</div>`;
+    if (session.current.example) backContent.append(element('p', 'explanation', session.current.example));
+    const grammar = grammarPanel(session.current.front, sentenceText => {
+      stopAudio();
+      pronounce(sentenceText, currentSettings, source => { sourceLabel.textContent = source; });
+    });
+    backContent.classList.toggle('has-grammar', !!grammar);
+    if (grammar) backContent.append(grammar);
     sounds = { front: a.sounds, back: b.sounds };
     for (const content of [frontContent, backContent]) {
       const length = content.textContent?.length || 0;
@@ -881,6 +930,7 @@ async function study(deck: Deck) {
     const { card: swipedCard, direction, movedToMemorized } = pendingUndo;
     hideUndo();
     session.undoLast(swipedCard, direction);
+    void recordActivity(deck.id, -1).catch(() => {});
     void persistSession();
     void unmarkReviewed(deck.id, swipedCard.id).catch(() => {});
     if (movedToMemorized) void moveBackFromMemorized(deck.id, swipedCard.id).catch(() => { pendingNotice = 'That card could not be restored. Please try again.'; });
@@ -911,6 +961,7 @@ async function study(deck: Deck) {
     timer = setTimeout(() => {
       if (disposed) return;
       const swiped = session.current!;
+      void recordActivity(deck.id).catch(() => {});
       session.swipe(direction);
       void persist();
       void persistSession();
@@ -1016,7 +1067,8 @@ async function study(deck: Deck) {
 async function bootstrap() {
   currentSettings = await loadSettings();
   applyTheme(currentSettings.theme);
-  onAuthChange(user => { currentUser = user; });
+  startUsageTracking();
+  onAuthChange(user => { currentUser = user; void setUsageUser(user?.uid || null).catch(() => {}); });
   document.addEventListener('visibilitychange', () => {
     document.documentElement.dataset.pageHidden = String(document.hidden);
     if (document.visibilityState === 'hidden') { stopPronunciation(); void syncAllToCloud(); }

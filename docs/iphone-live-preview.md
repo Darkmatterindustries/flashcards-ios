@@ -19,7 +19,7 @@ server through your router or use it on public Wi-Fi.
 Prepare the preview from an existing unsigned native build (Python 3):
 
 ```powershell
-python scripts/prepare-live-ipa.py http://YOUR-IP:5173
+python scripts/packaging/prepare-live-ipa.py http://YOUR-IP:5173
 ```
 
 Drag `artifacts/Flashcards-Live-unsigned.ipa` into Sideloadly and sign/install it.

@@ -14,19 +14,19 @@ Use an ElevenLabs key with text-to-speech access and voice-read access if listin
 List your voices and choose a German voice:
 
 ```powershell
-node scripts/generate-pronunciation.mjs --voices
+node scripts/audio/generate-pronunciation.mjs --voices
 ```
 
 Preview the work without generating or spending credits:
 
 ```powershell
-node scripts/generate-pronunciation.mjs docs/pronunciation-sample.txt
+node scripts/audio/generate-pronunciation.mjs docs/pronunciation-sample.txt
 ```
 
 Generate the three starter-card samples:
 
 ```powershell
-node scripts/generate-pronunciation.mjs docs/pronunciation-sample.txt --generate
+node scripts/audio/generate-pronunciation.mjs docs/pronunciation-sample.txt --generate
 ```
 
 Open the starter deck in Flashcards Live and tap the speaker. Settings also has a
@@ -40,9 +40,9 @@ To cover the imported decks in this workspace, export their spoken card fronts
 using the app's own APKG parser and text normalization, then generate:
 
 ```powershell
-node scripts/export-pronunciation.mjs flashcarddecks/German_C1_Vocabulary.apkg flashcarddecks/Goethe_C1_Vocabulary.apkg
-node scripts/generate-pronunciation.mjs artifacts/imported-pronunciation.txt
-node scripts/generate-pronunciation.mjs artifacts/imported-pronunciation.txt --generate
+node scripts/audio/export-pronunciation.mjs flashcarddecks/German_C1_Vocabulary.apkg flashcarddecks/Goethe_C1_Vocabulary.apkg
+node scripts/audio/generate-pronunciation.mjs artifacts/imported-pronunciation.txt
+node scripts/audio/generate-pronunciation.mjs artifacts/imported-pronunciation.txt --generate
 ```
 
 The exporter reads local files; it does not change the phone or cloud backup.

@@ -256,7 +256,8 @@ export async function resetProgress() {
   const tx = db.transaction('decks', 'readwrite');
   let cursor = await tx.store.openCursor();
   while (cursor) {
-    if (cursor.value.reviewed.length) await cursor.update({ ...cursor.value, reviewed: [] });
+    const value = cursor.value;
+    await cursor.update({ ...value, reviewed: [], activity: {}, activeSession: undefined, cards: value.cards.map(({ schedule: _schedule, ...card }) => card) });
     cursor = await cursor.continue();
   }
   await tx.done;

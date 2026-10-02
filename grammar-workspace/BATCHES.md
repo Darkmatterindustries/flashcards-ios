@@ -1,0 +1,224 @@
+# Batch checklist
+
+4388 unique fronts cover 4516 source cards. 220 batches of up to 20 entries. Checkbox means draft received, not linguistically approved. Run node scripts/grammar/check-claude-grammar.mjs for current validation status.
+
+- [x] [batch-001](inputs/batch-001.md) — 20 entries; output: outputs/batch-001.md
+- [x] [batch-002](inputs/batch-002.md) — 20 entries; output: outputs/batch-002.md
+- [x] [batch-003](inputs/batch-003.md) — 20 entries; output: outputs/batch-003.md
+- [x] [batch-004](inputs/batch-004.md) — 20 entries; output: outputs/batch-004.md
+- [x] [batch-005](inputs/batch-005.md) — 20 entries; output: outputs/batch-005.md
+- [x] [batch-006](inputs/batch-006.md) — 20 entries; output: outputs/batch-006.md
+- [x] [batch-007](inputs/batch-007.md) — 20 entries; output: outputs/batch-007.md
+- [x] [batch-008](inputs/batch-008.md) — 20 entries; output: outputs/batch-008.md
+- [x] [batch-009](inputs/batch-009.md) — 20 entries; output: outputs/batch-009.md
+- [x] [batch-010](inputs/batch-010.md) — 20 entries; output: outputs/batch-010.md
+- [x] [batch-011](inputs/batch-011.md) — 20 entries; output: outputs/batch-011.md
+- [x] [batch-012](inputs/batch-012.md) — 20 entries; output: outputs/batch-012.md
+- [x] [batch-013](inputs/batch-013.md) — 20 entries; output: outputs/batch-013.md
+- [x] [batch-014](inputs/batch-014.md) — 20 entries; output: outputs/batch-014.md
+- [x] [batch-015](inputs/batch-015.md) — 20 entries; output: outputs/batch-015.md
+- [x] [batch-016](inputs/batch-016.md) — 20 entries; output: outputs/batch-016.md
+- [x] [batch-017](inputs/batch-017.md) — 20 entries; output: outputs/batch-017.md
+- [x] [batch-018](inputs/batch-018.md) — 20 entries; output: outputs/batch-018.md
+- [x] [batch-019](inputs/batch-019.md) — 20 entries; output: outputs/batch-019.md
+- [x] [batch-020](inputs/batch-020.md) — 20 entries; output: outputs/batch-020.md
+- [x] [batch-021](inputs/batch-021.md) — 20 entries; output: outputs/batch-021.md
+- [x] [batch-022](inputs/batch-022.md) — 20 entries; output: outputs/batch-022.md
+- [x] [batch-023](inputs/batch-023.md) — 20 entries; output: outputs/batch-023.md
+- [x] [batch-024](inputs/batch-024.md) — 20 entries; output: outputs/batch-024.md
+- [x] [batch-025](inputs/batch-025.md) — 20 entries; output: outputs/batch-025.md
+- [x] [batch-026](inputs/batch-026.md) — 20 entries; output: outputs/batch-026.md
+- [x] [batch-027](inputs/batch-027.md) — 20 entries; output: outputs/batch-027.md
+- [x] [batch-028](inputs/batch-028.md) — 20 entries; output: outputs/batch-028.md
+- [x] [batch-029](inputs/batch-029.md) — 20 entries; output: outputs/batch-029.md
+- [x] [batch-030](inputs/batch-030.md) — 20 entries; output: outputs/batch-030.md
+- [x] [batch-031](inputs/batch-031.md) — 20 entries; output: outputs/batch-031.md
+- [x] [batch-032](inputs/batch-032.md) — 20 entries; output: outputs/batch-032.md
+- [x] [batch-033](inputs/batch-033.md) — 20 entries; output: outputs/batch-033.md
+- [x] [batch-034](inputs/batch-034.md) — 20 entries; output: outputs/batch-034.md
+- [x] [batch-035](inputs/batch-035.md) — 20 entries; output: outputs/batch-035.md
+- [x] [batch-036](inputs/batch-036.md) — 20 entries; output: outputs/batch-036.md
+- [x] [batch-037](inputs/batch-037.md) — 20 entries; output: outputs/batch-037.md
+- [x] [batch-038](inputs/batch-038.md) — 20 entries; output: outputs/batch-038.md
+- [x] [batch-039](inputs/batch-039.md) — 20 entries; output: outputs/batch-039.md
+- [x] [batch-040](inputs/batch-040.md) — 20 entries; output: outputs/batch-040.md
+- [x] [batch-041](inputs/batch-041.md) — 20 entries; output: outputs/batch-041.md
+- [x] [batch-042](inputs/batch-042.md) — 20 entries; output: outputs/batch-042.md
+- [x] [batch-043](inputs/batch-043.md) — 20 entries; output: outputs/batch-043.md
+- [x] [batch-044](inputs/batch-044.md) — 20 entries; output: outputs/batch-044.md
+- [x] [batch-045](inputs/batch-045.md) — 20 entries; output: outputs/batch-045.md
+- [x] [batch-046](inputs/batch-046.md) — 20 entries; output: outputs/batch-046.md
+- [x] [batch-047](inputs/batch-047.md) — 20 entries; output: outputs/batch-047.md
+- [x] [batch-048](inputs/batch-048.md) — 20 entries; output: outputs/batch-048.md
+- [x] [batch-049](inputs/batch-049.md) — 20 entries; output: outputs/batch-049.md
+- [x] [batch-050](inputs/batch-050.md) — 20 entries; output: outputs/batch-050.md
+- [x] [batch-051](inputs/batch-051.md) — 20 entries; output: outputs/batch-051.md
+- [x] [batch-052](inputs/batch-052.md) — 20 entries; output: outputs/batch-052.md
+- [x] [batch-053](inputs/batch-053.md) — 20 entries; output: outputs/batch-053.md
+- [x] [batch-054](inputs/batch-054.md) — 20 entries; output: outputs/batch-054.md
+- [x] [batch-055](inputs/batch-055.md) — 20 entries; output: outputs/batch-055.md
+- [x] [batch-056](inputs/batch-056.md) — 20 entries; output: outputs/batch-056.md
+- [x] [batch-057](inputs/batch-057.md) — 20 entries; output: outputs/batch-057.md
+- [x] [batch-058](inputs/batch-058.md) — 20 entries; output: outputs/batch-058.md
+- [x] [batch-059](inputs/batch-059.md) — 20 entries; output: outputs/batch-059.md
+- [x] [batch-060](inputs/batch-060.md) — 20 entries; output: outputs/batch-060.md
+- [x] [batch-061](inputs/batch-061.md) — 20 entries; output: outputs/batch-061.md
+- [x] [batch-062](inputs/batch-062.md) — 20 entries; output: outputs/batch-062.md
+- [x] [batch-063](inputs/batch-063.md) — 20 entries; output: outputs/batch-063.md
+- [x] [batch-064](inputs/batch-064.md) — 20 entries; output: outputs/batch-064.md
+- [x] [batch-065](inputs/batch-065.md) — 20 entries; output: outputs/batch-065.md
+- [x] [batch-066](inputs/batch-066.md) — 20 entries; output: outputs/batch-066.md
+- [x] [batch-067](inputs/batch-067.md) — 20 entries; output: outputs/batch-067.md
+- [x] [batch-068](inputs/batch-068.md) — 20 entries; output: outputs/batch-068.md
+- [x] [batch-069](inputs/batch-069.md) — 20 entries; output: outputs/batch-069.md
+- [x] [batch-070](inputs/batch-070.md) — 20 entries; output: outputs/batch-070.md
+- [x] [batch-071](inputs/batch-071.md) — 20 entries; output: outputs/batch-071.md
+- [x] [batch-072](inputs/batch-072.md) — 20 entries; output: outputs/batch-072.md
+- [x] [batch-073](inputs/batch-073.md) — 20 entries; output: outputs/batch-073.md
+- [x] [batch-074](inputs/batch-074.md) — 20 entries; output: outputs/batch-074.md
+- [x] [batch-075](inputs/batch-075.md) — 20 entries; output: outputs/batch-075.md
+- [x] [batch-076](inputs/batch-076.md) — 20 entries; output: outputs/batch-076.md
+- [x] [batch-077](inputs/batch-077.md) — 20 entries; output: outputs/batch-077.md
+- [x] [batch-078](inputs/batch-078.md) — 20 entries; output: outputs/batch-078.md
+- [x] [batch-079](inputs/batch-079.md) — 20 entries; output: outputs/batch-079.md
+- [x] [batch-080](inputs/batch-080.md) — 20 entries; output: outputs/batch-080.md
+- [x] [batch-081](inputs/batch-081.md) — 20 entries; output: outputs/batch-081.md
+- [x] [batch-082](inputs/batch-082.md) — 20 entries; output: outputs/batch-082.md
+- [x] [batch-083](inputs/batch-083.md) — 20 entries; output: outputs/batch-083.md
+- [x] [batch-084](inputs/batch-084.md) — 20 entries; output: outputs/batch-084.md
+- [x] [batch-085](inputs/batch-085.md) — 20 entries; output: outputs/batch-085.md
+- [x] [batch-086](inputs/batch-086.md) — 20 entries; output: outputs/batch-086.md
+- [x] [batch-087](inputs/batch-087.md) — 20 entries; output: outputs/batch-087.md
+- [x] [batch-088](inputs/batch-088.md) — 20 entries; output: outputs/batch-088.md
+- [x] [batch-089](inputs/batch-089.md) — 20 entries; output: outputs/batch-089.md
+- [x] [batch-090](inputs/batch-090.md) — 20 entries; output: outputs/batch-090.md
+- [x] [batch-091](inputs/batch-091.md) — 20 entries; output: outputs/batch-091.md
+- [x] [batch-092](inputs/batch-092.md) — 20 entries; output: outputs/batch-092.md
+- [x] [batch-093](inputs/batch-093.md) — 20 entries; output: outputs/batch-093.md
+- [x] [batch-094](inputs/batch-094.md) — 20 entries; output: outputs/batch-094.md
+- [x] [batch-095](inputs/batch-095.md) — 20 entries; output: outputs/batch-095.md
+- [x] [batch-096](inputs/batch-096.md) — 20 entries; output: outputs/batch-096.md
+- [x] [batch-097](inputs/batch-097.md) — 20 entries; output: outputs/batch-097.md
+- [x] [batch-098](inputs/batch-098.md) — 20 entries; output: outputs/batch-098.md
+- [x] [batch-099](inputs/batch-099.md) — 20 entries; output: outputs/batch-099.md
+- [ ] [batch-100](inputs/batch-100.md) — 20 entries; output: outputs/batch-100.md
+- [ ] [batch-101](inputs/batch-101.md) — 20 entries; output: outputs/batch-101.md
+- [ ] [batch-102](inputs/batch-102.md) — 20 entries; output: outputs/batch-102.md
+- [ ] [batch-103](inputs/batch-103.md) — 20 entries; output: outputs/batch-103.md
+- [ ] [batch-104](inputs/batch-104.md) — 20 entries; output: outputs/batch-104.md
+- [ ] [batch-105](inputs/batch-105.md) — 20 entries; output: outputs/batch-105.md
+- [ ] [batch-106](inputs/batch-106.md) — 20 entries; output: outputs/batch-106.md
+- [ ] [batch-107](inputs/batch-107.md) — 20 entries; output: outputs/batch-107.md
+- [ ] [batch-108](inputs/batch-108.md) — 20 entries; output: outputs/batch-108.md
+- [ ] [batch-109](inputs/batch-109.md) — 20 entries; output: outputs/batch-109.md
+- [ ] [batch-110](inputs/batch-110.md) — 20 entries; output: outputs/batch-110.md
+- [ ] [batch-111](inputs/batch-111.md) — 20 entries; output: outputs/batch-111.md
+- [ ] [batch-112](inputs/batch-112.md) — 20 entries; output: outputs/batch-112.md
+- [ ] [batch-113](inputs/batch-113.md) — 20 entries; output: outputs/batch-113.md
+- [ ] [batch-114](inputs/batch-114.md) — 20 entries; output: outputs/batch-114.md
+- [ ] [batch-115](inputs/batch-115.md) — 20 entries; output: outputs/batch-115.md
+- [ ] [batch-116](inputs/batch-116.md) — 20 entries; output: outputs/batch-116.md
+- [ ] [batch-117](inputs/batch-117.md) — 20 entries; output: outputs/batch-117.md
+- [ ] [batch-118](inputs/batch-118.md) — 20 entries; output: outputs/batch-118.md
+- [ ] [batch-119](inputs/batch-119.md) — 20 entries; output: outputs/batch-119.md
+- [ ] [batch-120](inputs/batch-120.md) — 20 entries; output: outputs/batch-120.md
+- [ ] [batch-121](inputs/batch-121.md) — 20 entries; output: outputs/batch-121.md
+- [ ] [batch-122](inputs/batch-122.md) — 20 entries; output: outputs/batch-122.md
+- [ ] [batch-123](inputs/batch-123.md) — 20 entries; output: outputs/batch-123.md
+- [ ] [batch-124](inputs/batch-124.md) — 20 entries; output: outputs/batch-124.md
+- [ ] [batch-125](inputs/batch-125.md) — 20 entries; output: outputs/batch-125.md
+- [ ] [batch-126](inputs/batch-126.md) — 20 entries; output: outputs/batch-126.md
+- [ ] [batch-127](inputs/batch-127.md) — 20 entries; output: outputs/batch-127.md
+- [ ] [batch-128](inputs/batch-128.md) — 20 entries; output: outputs/batch-128.md
+- [ ] [batch-129](inputs/batch-129.md) — 20 entries; output: outputs/batch-129.md
+- [ ] [batch-130](inputs/batch-130.md) — 20 entries; output: outputs/batch-130.md
+- [ ] [batch-131](inputs/batch-131.md) — 20 entries; output: outputs/batch-131.md
+- [ ] [batch-132](inputs/batch-132.md) — 20 entries; output: outputs/batch-132.md
+- [ ] [batch-133](inputs/batch-133.md) — 20 entries; output: outputs/batch-133.md
+- [ ] [batch-134](inputs/batch-134.md) — 20 entries; output: outputs/batch-134.md
+- [ ] [batch-135](inputs/batch-135.md) — 20 entries; output: outputs/batch-135.md
+- [ ] [batch-136](inputs/batch-136.md) — 20 entries; output: outputs/batch-136.md
+- [ ] [batch-137](inputs/batch-137.md) — 20 entries; output: outputs/batch-137.md
+- [ ] [batch-138](inputs/batch-138.md) — 20 entries; output: outputs/batch-138.md
+- [ ] [batch-139](inputs/batch-139.md) — 20 entries; output: outputs/batch-139.md
+- [ ] [batch-140](inputs/batch-140.md) — 20 entries; output: outputs/batch-140.md
+- [ ] [batch-141](inputs/batch-141.md) — 20 entries; output: outputs/batch-141.md
+- [ ] [batch-142](inputs/batch-142.md) — 20 entries; output: outputs/batch-142.md
+- [ ] [batch-143](inputs/batch-143.md) — 20 entries; output: outputs/batch-143.md
+- [ ] [batch-144](inputs/batch-144.md) — 20 entries; output: outputs/batch-144.md
+- [ ] [batch-145](inputs/batch-145.md) — 20 entries; output: outputs/batch-145.md
+- [ ] [batch-146](inputs/batch-146.md) — 20 entries; output: outputs/batch-146.md
+- [ ] [batch-147](inputs/batch-147.md) — 20 entries; output: outputs/batch-147.md
+- [ ] [batch-148](inputs/batch-148.md) — 20 entries; output: outputs/batch-148.md
+- [ ] [batch-149](inputs/batch-149.md) — 20 entries; output: outputs/batch-149.md
+- [ ] [batch-150](inputs/batch-150.md) — 20 entries; output: outputs/batch-150.md
+- [ ] [batch-151](inputs/batch-151.md) — 20 entries; output: outputs/batch-151.md
+- [ ] [batch-152](inputs/batch-152.md) — 20 entries; output: outputs/batch-152.md
+- [ ] [batch-153](inputs/batch-153.md) — 20 entries; output: outputs/batch-153.md
+- [ ] [batch-154](inputs/batch-154.md) — 20 entries; output: outputs/batch-154.md
+- [ ] [batch-155](inputs/batch-155.md) — 20 entries; output: outputs/batch-155.md
+- [ ] [batch-156](inputs/batch-156.md) — 20 entries; output: outputs/batch-156.md
+- [ ] [batch-157](inputs/batch-157.md) — 20 entries; output: outputs/batch-157.md
+- [ ] [batch-158](inputs/batch-158.md) — 20 entries; output: outputs/batch-158.md
+- [ ] [batch-159](inputs/batch-159.md) — 20 entries; output: outputs/batch-159.md
+- [ ] [batch-160](inputs/batch-160.md) — 20 entries; output: outputs/batch-160.md
+- [ ] [batch-161](inputs/batch-161.md) — 20 entries; output: outputs/batch-161.md
+- [ ] [batch-162](inputs/batch-162.md) — 20 entries; output: outputs/batch-162.md
+- [ ] [batch-163](inputs/batch-163.md) — 20 entries; output: outputs/batch-163.md
+- [ ] [batch-164](inputs/batch-164.md) — 20 entries; output: outputs/batch-164.md
+- [ ] [batch-165](inputs/batch-165.md) — 20 entries; output: outputs/batch-165.md
+- [ ] [batch-166](inputs/batch-166.md) — 20 entries; output: outputs/batch-166.md
+- [ ] [batch-167](inputs/batch-167.md) — 20 entries; output: outputs/batch-167.md
+- [ ] [batch-168](inputs/batch-168.md) — 20 entries; output: outputs/batch-168.md
+- [ ] [batch-169](inputs/batch-169.md) — 20 entries; output: outputs/batch-169.md
+- [ ] [batch-170](inputs/batch-170.md) — 20 entries; output: outputs/batch-170.md
+- [ ] [batch-171](inputs/batch-171.md) — 20 entries; output: outputs/batch-171.md
+- [ ] [batch-172](inputs/batch-172.md) — 20 entries; output: outputs/batch-172.md
+- [ ] [batch-173](inputs/batch-173.md) — 20 entries; output: outputs/batch-173.md
+- [ ] [batch-174](inputs/batch-174.md) — 20 entries; output: outputs/batch-174.md
+- [ ] [batch-175](inputs/batch-175.md) — 20 entries; output: outputs/batch-175.md
+- [ ] [batch-176](inputs/batch-176.md) — 20 entries; output: outputs/batch-176.md
+- [ ] [batch-177](inputs/batch-177.md) — 20 entries; output: outputs/batch-177.md
+- [ ] [batch-178](inputs/batch-178.md) — 20 entries; output: outputs/batch-178.md
+- [ ] [batch-179](inputs/batch-179.md) — 20 entries; output: outputs/batch-179.md
+- [ ] [batch-180](inputs/batch-180.md) — 20 entries; output: outputs/batch-180.md
+- [ ] [batch-181](inputs/batch-181.md) — 20 entries; output: outputs/batch-181.md
+- [ ] [batch-182](inputs/batch-182.md) — 20 entries; output: outputs/batch-182.md
+- [ ] [batch-183](inputs/batch-183.md) — 20 entries; output: outputs/batch-183.md
+- [ ] [batch-184](inputs/batch-184.md) — 20 entries; output: outputs/batch-184.md
+- [ ] [batch-185](inputs/batch-185.md) — 20 entries; output: outputs/batch-185.md
+- [ ] [batch-186](inputs/batch-186.md) — 20 entries; output: outputs/batch-186.md
+- [ ] [batch-187](inputs/batch-187.md) — 20 entries; output: outputs/batch-187.md
+- [ ] [batch-188](inputs/batch-188.md) — 20 entries; output: outputs/batch-188.md
+- [ ] [batch-189](inputs/batch-189.md) — 20 entries; output: outputs/batch-189.md
+- [ ] [batch-190](inputs/batch-190.md) — 20 entries; output: outputs/batch-190.md
+- [ ] [batch-191](inputs/batch-191.md) — 20 entries; output: outputs/batch-191.md
+- [ ] [batch-192](inputs/batch-192.md) — 20 entries; output: outputs/batch-192.md
+- [ ] [batch-193](inputs/batch-193.md) — 20 entries; output: outputs/batch-193.md
+- [ ] [batch-194](inputs/batch-194.md) — 20 entries; output: outputs/batch-194.md
+- [ ] [batch-195](inputs/batch-195.md) — 20 entries; output: outputs/batch-195.md
+- [x] [batch-196](inputs/batch-196.md) — 20 entries; output: outputs/batch-196.md
+- [x] [batch-197](inputs/batch-197.md) — 20 entries; output: outputs/batch-197.md
+- [x] [batch-198](inputs/batch-198.md) — 20 entries; output: outputs/batch-198.md
+- [x] [batch-199](inputs/batch-199.md) — 20 entries; output: outputs/batch-199.md
+- [x] [batch-200](inputs/batch-200.md) — 20 entries; output: outputs/batch-200.md
+- [x] [batch-201](inputs/batch-201.md) — 20 entries; output: outputs/batch-201.md
+- [x] [batch-202](inputs/batch-202.md) — 20 entries; output: outputs/batch-202.md
+- [x] [batch-203](inputs/batch-203.md) — 20 entries; output: outputs/batch-203.md
+- [x] [batch-204](inputs/batch-204.md) — 20 entries; output: outputs/batch-204.md
+- [x] [batch-205](inputs/batch-205.md) — 20 entries; output: outputs/batch-205.md
+- [x] [batch-206](inputs/batch-206.md) — 20 entries; output: outputs/batch-206.md
+- [x] [batch-207](inputs/batch-207.md) — 20 entries; output: outputs/batch-207.md
+- [x] [batch-208](inputs/batch-208.md) — 20 entries; output: outputs/batch-208.md
+- [x] [batch-209](inputs/batch-209.md) — 20 entries; output: outputs/batch-209.md
+- [x] [batch-210](inputs/batch-210.md) — 20 entries; output: outputs/batch-210.md
+- [x] [batch-211](inputs/batch-211.md) — 20 entries; output: outputs/batch-211.md
+- [x] [batch-212](inputs/batch-212.md) — 20 entries; output: outputs/batch-212.md
+- [x] [batch-213](inputs/batch-213.md) — 20 entries; output: outputs/batch-213.md
+- [x] [batch-214](inputs/batch-214.md) — 20 entries; output: outputs/batch-214.md
+- [x] [batch-215](inputs/batch-215.md) — 20 entries; output: outputs/batch-215.md
+- [x] [batch-216](inputs/batch-216.md) — 20 entries; output: outputs/batch-216.md
+- [x] [batch-217](inputs/batch-217.md) — 20 entries; output: outputs/batch-217.md
+- [x] [batch-218](inputs/batch-218.md) — 20 entries; output: outputs/batch-218.md
+- [x] [batch-219](inputs/batch-219.md) — 20 entries; output: outputs/batch-219.md
+- [x] [batch-220](inputs/batch-220.md) — 8 entries; output: outputs/batch-220.md

@@ -35,7 +35,7 @@ export interface AppSettings { voiceURI: string; speechRate: number; theme: Them
 export const defaultSettings: AppSettings = { voiceURI: '', speechRate: 1, theme: 'system', preferRecordedAudio: true, background: 'none', backgroundIntensity: 0.6 };
 
 /** Device-local record of backup health; never synced to the cloud itself. */
-export interface BackupStatus { lastSuccessAt?: number; lastAttemptAt?: number; lastError?: string }
+export interface BackupStatus { lastSuccessAt?: number; lastAttemptAt?: number; lastError?: string; syncedThrough?: number; userId?: string }
 
 export function starterDeck(): Deck {
   return {

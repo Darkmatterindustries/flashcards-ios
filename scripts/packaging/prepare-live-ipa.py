@@ -1,6 +1,6 @@
 """Prepare a separate, unsigned LAN preview from an existing Capacitor IPA.
 
-Usage: python scripts/prepare-live-ipa.py http://192.168.0.197:5173
+Usage: python scripts/packaging/prepare-live-ipa.py http://192.168.0.197:5173
 Sign the output with Sideloadly before installing. Requires Python 3.
 """
 import argparse

@@ -1,0 +1,9 @@
+# Daily app time
+
+Settings shows recorded dates with total time and iOS, Android, Windows or Web breakdowns. Tracking starts with this update; older time cannot be reconstructed. The timer measures visible, focused app time, including reading, and pauses when hidden or unfocused. It is not an inactivity detector. Intervals longer than 15 seconds are excluded to avoid counting computer sleep or suspended webviews. Local checkpoints run every five seconds; a sudden process termination may lose the last few seconds. Intervals crossing midnight are split using the device's local calendar.
+
+Usage persists separately from decks in IndexedDB `flashcards-usage`. Signed-out time stays local and is transferred to the next signed-in account. Account histories are isolated. Each installation has a device identifier; overlapping local intervals are deduplicated in a read/write transaction. Simultaneous use on separate devices is added, not treated as one wall-clock session.
+
+Signed-in usage syncs on login, roughly every minute while active, on returning online, and through Settings > Sync app time or the full backup action. Offline data stays local and retries later. Records are stored under `users/{uid}/meta/usage-{deviceId}`. Existing Firestore rules must allow the owner to read/write their own meta documents and list that collection. Per-device daily counters merge using a transaction and maximum values so retried or stale uploads do not double-count or overwrite newer time. Other device totals appear after those devices upload and this device syncs.
+
+Automated checks cover local persistence, hidden intervals, midnight splitting, invalid/backward intervals, duplicate/stale cloud uploads and account isolation. Cloud tests mock Firestore; authenticated production sync must be confirmed by the signed-in user via the status shown in Settings.
